@@ -14,74 +14,63 @@
 #include "index.h"
 #include "operator.h"
 
-// proper grim
-#define TERM_MAP_DATA_TYPE \
-        std::pair< \
-            std::string, \
-            std::vector< \
-                std::pair< \
-                    std::string, \
-                    std::unordered_set< \
-                        std::string \
-                    > \
-                > \
-            > \
-        > \
+using TERM_MAP_SUB_DATA_TYPE = std::pair<std::string, std::unordered_set<std::string>>;
 
+// FIXME clean hashes
+struct TermMapSubDataHash {
+    std::size_t operator()(TERM_MAP_SUB_DATA_TYPE a) const {
+        std::size_t seed = std::hash<std::string>()(a.first);
+        for (auto b = a.second.begin(); b != a.second.end(); b++) {
+            // FIXME: these must commute!!! will addition result in hash collision?
+            //seed ^= std::hash<std::string>()((*b)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed += std::hash<std::string>()((*b));
+        }
+        return seed;
+    }
+};
 
-// Create a struct for elements of TermMap to implement the equality
-// and hashing functions
-//struct TermMapElement {
-//    std::string first;
-//    std::vector<std::pair<std::string, std::unordered_set<std::string>>> second;
-//
-//    TermMapElement() { }
-//    TermMapElement(
-//            std::string first,
-//            std::vector<std::pair<std::string, std::unordered_set<std::string>>> second
-//    ) {
-//        this->x = x;
-//        this->y = y;
-//    }
-//
-//    bool operator==(const TermMapElement &other) const 
-//        // FIXME single breakpoint plz
-//
-//        if (this->first != other.first) {
-//            return false;
-//        } else {
-//            if ((this->second).size() != (other.second.size())) {
-//                return false;
-//            } else {
-//                for (int x = 0; x < other.second.size(); x++) {
-//                    if ((this->second)[x].first != (other.second[x].first)) {
-//                        return false;
-//                    } else {
-//                        if ((this->second)[x].second != (other.second[x].second)) {
-//                            return false;
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        return true;
-//    }
-//}
+using TERM_MAP_DATA_TYPE = std::pair<std::string, std::unordered_set<TERM_MAP_SUB_DATA_TYPE, TermMapSubDataHash>>;
+
+struct TermMapDataHash {
+    std::size_t operator()(TERM_MAP_DATA_TYPE a) const {
+        std::size_t seed = std::hash<std::string>()(a.first);
+        for (auto b = a.second.begin(); b != a.second.end(); b++) {
+            // FIXME: these must commute!!! will addition result in hash collision?
+            //seed ^= TermMapSubDataHash()((*b)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed += TermMapSubDataHash()((*b));
+        }
+        return seed;
+    }
+};
 
 class TermMap {
     public:
-        std::vector<TERM_MAP_DATA_TYPE> data;  // TODO this needs to be a set
+        std::unordered_set<TERM_MAP_DATA_TYPE, TermMapDataHash> data;  // TODO this needs to be a set
 
         TermMap();
         TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors);
 };
 
-bool operator==(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b);
-bool operator!=(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b);
+struct TermMapHash {
+    std::size_t operator()(TermMap a) const {
+        std::size_t seed = 0;
+        for (auto b = a.data.begin(); b != a.data.end(); b++) {
+            // FIXME: these must commute!!! will addition result in hash collision?
+            //seed ^= TermMapDataHash()(*b) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed += TermMapDataHash()(*b);
+        }
+        return seed;
+    }
+};
 
-bool operator==(const TermMap &a, const TermMap &b);
-bool operator!=(const TermMap &a, const TermMap &b);
+bool operator==(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b);
+bool operator!=(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b);
+
+bool operator==(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b);
+bool operator!=(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b);
+
+bool operator==(TermMap &a, TermMap &b);
+bool operator!=(TermMap &a, TermMap &b);
 
 std::unordered_map<std::string, std::string> default_index_key();
 

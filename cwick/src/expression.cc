@@ -122,43 +122,27 @@ TermMap::TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors) {
         }
 
         // make element of TermMap.data
-        TERM_MAP_DATA_TYPE elem;
-        elem.first = tiname;
+        std::unordered_set<TERM_MAP_SUB_DATA_TYPE, TermMapSubDataHash> subdatas;
         for (unsigned int x = 0; x < strs_keys.size(); x++) {
-            std::pair<std::string, std::unordered_set<std::string>> p;
-            p.first = strs_keys[x];
-            p.second = strs_vals[x];
-
-            elem.second.push_back(p);
+            TERM_MAP_SUB_DATA_TYPE p(strs_keys[x], strs_vals[x]);
+            subdatas.insert(p);
         }
 
-        // append element if not in already - may scale too badly FIXME
-        bool found = false;
-        for (unsigned int x = 0; x < data.size(); x++) {
-            if (elem == data[x]) {
-                found = true;
-                break;
-            }
-        }
-        if (!(found)) {
-            data.push_back(elem);
-        }
+        TERM_MAP_DATA_TYPE elem(tiname, subdatas);
+        data.insert(elem);
     }
-
-    // kill me
 }
 
-// FIXME single breakpoint plz
-bool operator==(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b) {
+bool operator==(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b) {
     if (a.first != b.first) {
         return false;
-    } else if (a.second.size() != b.second.size()) {
+    }
+    else if (a.second.size() != b.second.size()) {
         return false;
-    } else {
-        for (unsigned int i = 0; i < a.second.size(); i++) {
-            if (a.second[i].first != b.second[i].first) {
-                return false;
-            } else if (a.second[i].second != b.second[i].second) {
+    }
+    else {
+        for (auto ai = a.second.begin(); ai != a.second.end(); ai++) {
+            if (b.second.find(*ai) == b.second.end()) {
                 return false;
             }
         }
@@ -167,26 +151,48 @@ bool operator==(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b) {
     return true;
 }
 
-bool operator!=(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b) {
+bool operator!=(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b) {
     return (!(a == b));
 }
 
-// FIXME when vector is changed to set
-bool operator==(const TermMap &a, const TermMap &b) {
-    if (a.data.size() != b.data.size()) {
+bool operator==(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b) {
+    if (a.first != b.first) {
         return false;
-    } else {
-        for (unsigned int i = 0; i < a.data.size(); i++) {
-            if (a.data[i] != b.data[i]) {
+    }
+    else if (a.second.size() != b.second.size()) {
+        return false;
+    }
+    else {
+        for (auto ai = a.second.begin(); ai != a.second.end(); ai++) {
+            if (b.second.find(*ai) == b.second.end()) {
                 return false;
             }
         }
     }
-    
+
     return true;
 }
 
-bool operator!=(const TermMap &a, const TermMap &b) {
+bool operator!=(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b) {
+    return (!(a == b));
+}
+
+bool operator==(TermMap &a, TermMap &b) {
+    if (a.data.size() != b.data.size()) {
+        return false;
+    }
+    else {
+        for (auto ai = a.data.begin(); ai != a.data.end(); ai++) {
+            if (b.data.find(*ai) == b.data.end()) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool operator!=(TermMap &a, TermMap &b) {
     return (!(a == b));
 }
 

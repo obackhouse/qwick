@@ -14,23 +14,10 @@ void export_expression(py::module &m) {
     // FIXME: not exposing the data keyword since it's currently not a set
     py::class_<TermMap, std::shared_ptr<TermMap>>(m, "TermMap")
         .def(py::init<std::vector<Sigma>, std::vector<Tensor>>())
-        .def("__eq__", [](const TermMap &a, const TermMap &b) { return a == b; })
-        .def("__neq__", [](const TermMap &a, const TermMap &b) { return a != b; });
+        .def("__eq__", [](TermMap &a, TermMap &b) { return a == b; })
+        .def("__neq__", [](TermMap &a, TermMap &b) { return a != b; });
 
     py::class_<Term, std::shared_ptr<Term>>(m, "Term")
-        //.def(py::init<double,
-        //        std::vector<Sigma>,
-        //        std::vector<Tensor>,
-        //        std::vector<Operator>,
-        //        std::vector<Delta>,
-        //        std::unordered_map<std::string, std::string>
-        //        >(),
-        //        py::arg("scalar"),
-        //        py::arg("sums")=std::vector<Sigma>(),
-        //        py::arg("tensors")=std::vector<Tensor>(),
-        //        py::arg("operators")=std::vector<Operator>(),
-        //        py::arg("deltas")=std::vector<Delta>(),
-        //        py::arg("index_key")=default_index_key())
         .def(py::init([](
                 double scalar,
                 std::vector<Sigma> sums,
