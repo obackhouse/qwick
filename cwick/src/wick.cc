@@ -5,7 +5,6 @@
 #include "operator.h"
 #include "expression.h"
 #include "wick.h"
-#include<iostream>
 
 
 // TODO occ keyword

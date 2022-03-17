@@ -5,11 +5,13 @@
 #ifndef OPERATOR_H
 #define OPERATOR_H
 
-#include<string>
-#include<vector>
-#include<cassert>
-
 #include "index.h"
+
+#include <string>
+#include <vector>
+#include <cassert>
+#include <unordered_set>
+#include <unordered_map>
 
 class Operator{
     public:
@@ -22,7 +24,7 @@ class Operator{
         Operator(const Idx _idx, bool _ca, bool _fermion=true);
 
         std::string repr();
-        std::string _print_str();  // TODO
+        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
         Operator _inc(int i);
         Operator dagger();
         Operator copy();
@@ -47,17 +49,16 @@ class Tensor {
     public:
         std::vector<Idx> indices;
         std::string name;
-        TensorSym sym;  // TODO handle default value
+        TensorSym sym;
 
         Tensor();
         Tensor(const std::vector<Idx> _indices, const std::string _name, const TensorSym _sym=TensorSym());
 
-        void hash();  // TODO
         Tensor _inc(int i);
         std::vector<Idx> ilist();
         std::string repr();
-        std::string _istr();  // TODO
-        std::string _print_str();  // TODO
+        std::string _istr(std::unordered_map<Idx, std::string, IdxHash> imap);
+        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
         void transpose(std::vector<int>);
         Tensor copy();
 };
@@ -78,10 +79,9 @@ class Sigma {
         Sigma();
         Sigma(Idx _idx);
 
-        void hash();  // TODO
         Sigma _inc(int i);
         std::string repr();
-        std::string _print_str();  // TODO
+        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
         Sigma copy();
 };
 
@@ -100,9 +100,8 @@ class Delta {
         Delta();
         Delta(Idx _i1, Idx _i2);
 
-        void hash();  // TODO
         std::string repr();
-        std::string _print_str();
+        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
         Delta _inc(int i);
         Delta copy();
 };

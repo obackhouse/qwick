@@ -32,7 +32,7 @@ void export_expression(py::module &m) {
                 py::arg("tensors")=std::vector<Tensor>(),
                 py::arg("operators")=std::vector<Operator>(),
                 py::arg("deltas")=std::vector<Delta>(),
-                py::arg("index_key")=std::unordered_map<std::string, std::string>()
+                py::arg("index_key")=default_index_key()
         )
         .def(py::init([](
                 double scalar,
@@ -65,6 +65,8 @@ void export_expression(py::module &m) {
         .def("__rmul__", [](Term &a, double &b) { return a * b; })
         .def("__mul__", [](Term &a, int &b) { return a * b; })
         .def("__rmul__", [](Term &a, int &b) { return a * b; })
+        .def("_print_str", &Term::_print_str, py::arg("scalar")=true)
+        .def("_idx_map", &Term::_idx_map)
         .def("ilist", &Term::ilist)
         .def("resolve", &Term::resolve)
         .def("_inc", &Term::_inc)
@@ -82,7 +84,7 @@ void export_expression(py::module &m) {
                 py::arg("scalar")=1.0,
                 py::arg("sums")=std::vector<Sigma>(),
                 py::arg("tensors")=std::vector<Tensor>(),
-                py::arg("index_key")=std::unordered_map<std::string, std::string>()
+                py::arg("index_key")=default_index_key()
         )
         .def(py::init([](
                 double scalar,
@@ -113,6 +115,9 @@ void export_expression(py::module &m) {
         .def("__rmul__", [](ATerm &a, double &b) { return a * b; })
         .def("__mul__", [](ATerm &a, int &b) { return a * b; })
         .def("__rmul__", [](ATerm &a, int &b) { return a * b; })
+        .def("_print_str", &ATerm::_print_str, py::arg("scalar")=true)
+        .def("_idx_map", &ATerm::_idx_map)
+        .def("_einsum_str", &ATerm::_einsum_str)
         .def("_inc", &ATerm::_inc)
         .def("match", &ATerm::match)
         .def("pmatch", &ATerm::pmatch)
@@ -140,6 +145,7 @@ void export_expression(py::module &m) {
         .def("__rmul__", [](Expression &a, double &b) { return a * b; })
         .def("__mul__", [](Expression &a, int &b) { return a * b; })
         .def("__rmul__", [](Expression &a, int &b) { return a * b; })
+        .def("_print_str", &Expression::_print_str)
         .def("resolve", &Expression::resolve)
         .def("repr", &Expression::repr)
         .def("are_operators", &Expression::are_operators);
@@ -168,9 +174,12 @@ void export_expression(py::module &m) {
         )
         .def_readwrite("terms", &AExpression::terms)
         .def_readonly("tthresh", &AExpression::tthresh)
+        .def("__repr__", &AExpression::_print_str)
         .def("simplify", &AExpression::simplify)
         .def("sort", &AExpression::sort)
         .def("sort_tensors", &AExpression::sort_tensors)
+        .def("_print_str", &AExpression::_print_str)
+        .def("_print_einsum", &AExpression::_print_einsum, py::arg("lhs")="")
         .def("connected", &AExpression::connected)
         .def("get_connected", &AExpression::get_connected,
                 py::arg("simplify")=true, py::arg("sort")=true)

@@ -2,10 +2,12 @@
  *  Expressions
  */
 
+#include "util.h"
 #include "index.h"
 #include "operator.h"
 #include "expression.h"
-#include<math.h>
+
+#include <math.h>
 #include<iostream>
 
 #define swap(x, y) { auto temp = x; x = y; y = temp; }
@@ -483,6 +485,7 @@ void _resolve(
 }
 
 
+// TODO make this into a static quantity
 std::unordered_map<std::string, std::string> default_index_key() {
     std::unordered_map<std::string, std::string> out = {
         {"occ", "ijklmnop"},
@@ -518,7 +521,7 @@ void Term::resolve() {
 }
 
 std::string Term::repr() {
-    std::string out = std::to_string(scalar);
+    std::string out = format_float(scalar, false);
 
     for (unsigned int i = 0; i < sums.size(); i++) {
         out = out + sums[i].repr();
@@ -534,6 +537,53 @@ std::string Term::repr() {
     }
 
     return out;
+}
+
+std::string Term::_print_str(bool with_scalar) {
+    auto imap = _idx_map();
+
+    std::string out = "";
+    if (with_scalar) {
+        out += format_float(scalar, false);
+    }
+
+    for (auto x = sums.begin(); x < sums.end(); x++) {
+        out += (*x)._print_str(imap);
+    }
+    for (auto x = deltas.begin(); x < deltas.end(); x++) {
+        out += (*x)._print_str(imap);
+    }
+    for (auto x = tensors.begin(); x < tensors.end(); x++) {
+        out += (*x)._print_str(imap);
+    }
+    for (auto x = operators.begin(); x < operators.end(); x++) {
+        out += (*x)._print_str(imap);
+    }
+
+    return out;
+}
+
+std::unordered_map<Idx, std::string, IdxHash> Term::_idx_map() {
+    auto _ilist = ilist();
+
+    std::unordered_map<std::string, int> off;
+    std::unordered_map<Idx, std::string, IdxHash> imap;
+
+    int o;
+    for (auto idx = _ilist.begin(); idx < _ilist.end(); idx++) {
+        if (off.find((*idx).space) != off.end()) {
+            o = off[(*idx).space];
+            off[(*idx).space] += 1;
+        }
+        else {
+            o = 0;
+            off[(*idx).space] = 1;
+        }
+
+        imap[*idx] = index_key[(*idx).space][o];
+    }
+
+    return imap;
 }
 
 std::vector<Idx> Term::ilist() {
@@ -760,7 +810,7 @@ ATerm::ATerm(Term term) {
 }
 
 std::string ATerm::repr() {
-    std::string out = std::to_string(scalar);
+    std::string out = format_float(scalar, false);
 
     for (unsigned int i = 0; i < sums.size(); i++) {
         out = out + sums[i].repr();
@@ -770,6 +820,74 @@ std::string ATerm::repr() {
     }
 
     return out;
+}
+
+std::string ATerm::_print_str(bool with_scalar) {
+    auto imap = _idx_map();
+
+    std::string out = "";
+    if (with_scalar) {
+        out += format_float(scalar, true);
+    }
+
+    std::string iis = "";
+    for (auto x = sums.begin(); x < sums.end(); x++) {
+        iis += imap[(*x).idx];
+    }
+    if (iis != "") {
+        out += "\\sum_{" + iis + "}";
+    }
+
+    for (auto x = tensors.begin(); x < tensors.end(); x++) {
+        out += (*x)._print_str(imap);
+    }
+
+    return out;
+}
+
+std::string ATerm::_einsum_str() {
+    auto imap = _idx_map();
+    std::string sstr = format_float(scalar, true);
+    std::string fstr = "";
+    std::string istr = "";
+    std::string tstr = "";
+
+    for (auto tt = tensors.begin(); tt < tensors.end(); tt++) {
+        if ((*tt).name == "") {
+            fstr += (*tt)._istr(imap);
+        }
+        else {
+            tstr += ", " + (*tt).name;
+            istr += (*tt)._istr(imap) + ",";
+        }
+    }
+
+    istr.pop_back();
+
+    return sstr + "*einsum('" + istr + "->" + fstr + "'" + tstr + ")";
+}
+
+std::unordered_map<Idx, std::string, IdxHash> ATerm::_idx_map() {
+    auto _ilist = ilist();
+
+    std::unordered_map<std::string, int> off;
+    std::unordered_map<Idx, std::string, IdxHash> imap;
+
+    int o;
+    for (auto idx = _ilist.begin(); idx < _ilist.end(); idx++) {
+        if (off.find((*idx).space) != off.end()) {
+            o = off[(*idx).space];
+            off[(*idx).space] += 1;
+        }
+        else {
+            o = 0;
+            off[(*idx).space] = 1;
+        }
+
+        imap[*idx] = index_key[(*idx).space][o];
+    }
+
+    return imap;
 }
 
 ATerm ATerm::_inc(int i) {
@@ -1237,6 +1355,20 @@ std::string Expression::repr() {
     return out;
 }
 
+std::string Expression::_print_str() {
+    std::string out = "";
+
+    for (auto t = terms.begin(); t < terms.end(); t++) {
+        if (out != "") {
+            out += "\n";
+        }
+        std::string sign = ((*t).scalar < 0) ? " - " : " + ";
+        out += sign + format_float(fabs((*t).scalar), false) + (*t)._print_str(false);
+    }
+
+    return out;
+}
+
 bool Expression::are_operators() {
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (terms[i].operators.size() > 0) {
@@ -1401,6 +1533,33 @@ void AExpression::sort_tensors() {
 
 void AExpression::sort() {
     std::sort(terms.begin(), terms.end());
+}
+
+std::string AExpression::_print_str() {
+    std::string out = "";
+
+    for (auto t = terms.begin(); t < terms.end(); t++) {
+        if (out != "") {
+            out += "\n";
+        }
+        std::string sign = ((*t).scalar < 0) ? " - " : " + ";
+        out += sign + format_float(fabs((*t).scalar), true) + (*t)._print_str(false);
+    }
+
+    return out;
+}
+
+std::string AExpression::_print_einsum(std::string lhs) {
+    std::string out = "";
+
+    for (auto t = terms.begin(); t < terms.end(); t++) {
+        if (out != "") {
+            out += "\n";
+        }
+        out += lhs + " += " + (*t)._einsum_str();
+    }
+
+    return out;
 }
 
 bool AExpression::connected() {

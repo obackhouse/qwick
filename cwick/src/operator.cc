@@ -2,6 +2,7 @@
  *  Operators
  */
 
+#include "util.h"
 #include "index.h"
 #include "operator.h"
 
@@ -39,6 +40,32 @@ std::string Operator::repr() {
         }
         else {
             out = "b_" + idx.repr();
+        }
+    }
+
+    return out;
+}
+
+std::string Operator::_print_str(std::unordered_map<Idx, std::string, IdxHash> imap) {
+    std::string out;
+
+    if (projector) {
+        out = "P";
+    }
+    else if (fermion) {
+        if (ca) {
+            out = "a^{\\dagger}_" + imap[idx];
+        }
+        else {
+            out = "a_" + imap[idx];
+        }
+    }
+    else {
+        if (ca) {
+            out = "b^{\\dagger}_" + imap[idx];
+        }
+        else {
+            out = "b_" + imap[idx];
         }
     }
 
@@ -233,6 +260,29 @@ std::string Tensor::repr() {
     return out;
 }
 
+std::string Tensor::_istr(std::unordered_map<Idx, std::string, IdxHash> imap) {
+    std::string out = "";
+
+    for (unsigned int i = 0; i < indices.size(); i++) {
+        out = out + imap[indices[i]];
+    }
+
+    return out;
+}
+
+std::string Tensor::_print_str(std::unordered_map<Idx, std::string, IdxHash> imap) {
+    if (name == "") {
+        return "";
+    }
+
+    std::string out = "";
+    for (unsigned int i = 0; i < indices.size(); i++) {
+        out = out + imap[indices[i]];
+    }
+
+    return name + "_{" + out + "}";
+}
+
 Tensor Tensor::_inc(int i) {
     std::vector<Idx> new_indices;
 
@@ -314,6 +364,10 @@ std::string Sigma::repr() {
     return "\\sum_{" + std::to_string(idx.index) + "}";
 }
 
+std::string Sigma::_print_str(std::unordered_map<Idx, std::string, IdxHash> imap) {
+    return "\\sum_{" + imap[idx] + "}";
+}
+
 Sigma Sigma::copy() {
     return Sigma(idx_copy(idx));
 }
@@ -354,6 +408,10 @@ Delta::Delta(Idx _i1, Idx _i2) {
 
 std::string Delta::repr() {
     return "\\delta_{" + std::to_string(i1.index) + "," + std::to_string(i2.index) + "}";
+}
+
+std::string Delta::_print_str(std::unordered_map<Idx, std::string, IdxHash> imap) {
+    return "\\delta_{" + imap[i1] + imap[i2] + "}";
 }
 
 Delta Delta::_inc(int i) {

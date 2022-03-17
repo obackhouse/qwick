@@ -17,24 +17,28 @@ log:
 
 index.so:
 	$(GCC) $(INCLUDE) $(PBFLAGS) $(CFLAGS) \
+		$(SRC)/util.cc \
 		$(SRC)/index.cc \
 		$(API)/_index.cc \
 		-o $(BUILD)/_index$(PBSUFFIX)
 
 operator.so:
 	$(GCC) $(INCLUDE) $(PBFLAGS) $(CFLAGS) \
+		$(SRC)/util.cc \
 		$(SRC)/index.cc $(SRC)/operator.cc \
 		$(API)/_operator.cc \
 		-o $(BUILD)/_operator$(PBSUFFIX)
 
 expression.so:
 	$(GCC) $(INCLUDE) $(PBFLAGS) $(CFLAGS) \
+		$(SRC)/util.cc \
 		$(SRC)/index.cc $(SRC)/operator.cc $(SRC)/expression.cc \
 		$(API)/_expression.cc \
 		-o $(BUILD)/_expression$(PBSUFFIX)
 
 wick.so:
 	$(GCC) $(INCLUDE) $(PBFLAGS) $(CFLAGS) \
+		$(SRC)/util.cc \
 		$(SRC)/index.cc $(SRC)/operator.cc $(SRC)/expression.cc $(SRC)/wick.cc \
 		$(API)/_wick.cc \
 		-o $(BUILD)/_wick$(PBSUFFIX)

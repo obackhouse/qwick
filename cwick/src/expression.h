@@ -103,8 +103,8 @@ class Term {
 
         void resolve();
         std::string repr();
-        std::string _print_str(); // TODO
-        std::string _idx_map(); // TODO
+        std::string _print_str(bool with_scalar=true);
+        std::unordered_map<Idx, std::string, IdxHash> _idx_map();
         std::vector<Idx> ilist();
         Term _inc(int i);
         Term copy();
@@ -136,9 +136,9 @@ class ATerm {
 
         ATerm _inc(int i);
         std::string repr();
-        std::string _print_str(); // TODO
-        std::string _idx_map(); // TODO
-        std::string _einsum_str(); // TODO
+        std::string _print_str(bool with_scalar=true);
+        std::unordered_map<Idx, std::string, IdxHash> _idx_map();
+        std::string _einsum_str();
         bool match(ATerm other);
         int pmatch(ATerm other);
         std::vector<Idx> ilist();
@@ -174,7 +174,7 @@ class Expression {
 
         void resolve();
         std::string repr();
-        std::string _print_str(); // TODO
+        std::string _print_str();
         bool are_operators();
 };
 
@@ -201,8 +201,8 @@ class AExpression {
         void simplify();
         void sort();
         void sort_tensors();
-        std::string _print_str(); // TODO
-        std::string _print_einsum(); // TODO
+        std::string _print_str();
+        std::string _print_einsum(std::string lhs="");
         bool connected();
         AExpression get_connected(bool _simplify, bool _sort);
         bool pmatch(AExpression other);

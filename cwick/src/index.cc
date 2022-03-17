@@ -2,11 +2,12 @@
  *  Indices
  */
 
+#include "util.h"
+#include "index.h"
+
 #include<string>
 #include<vector>
 #include<algorithm>
-
-#include "index.h"
 
 Idx::Idx() {}
 
