@@ -1537,3 +1537,79 @@ void AExpression::transpose(const std::vector<int> &perm) {
         terms[i].transpose(perm);
     }
 }
+
+AExpression operator+(const AExpression &a, const AExpression &b) {
+    std::vector<ATerm> newterms(a.terms.size() + b.terms.size());
+    for (unsigned int i = 0; i < a.terms.size(); i++) {
+        newterms[i] = a.terms[i];
+    }
+    for (unsigned int i = 0; i < b.terms.size(); i++) {
+        newterms[i+a.terms.size()] = b.terms[i];
+    }
+
+    return AExpression(newterms);
+}
+
+AExpression operator-(const AExpression &a, const AExpression &b) {
+    double fac = -1.0;
+    AExpression mb = b * fac;
+    return (a + mb);
+}
+
+AExpression operator*(const AExpression &a, const AExpression &b) {
+    std::vector<ATerm> newterms(a.terms.size() * b.terms.size());
+
+    for (unsigned int i = 0, ij = 0; i < a.terms.size(); i++) {
+        for (unsigned int j = 0; j < b.terms.size(); j++, ij++) {
+            newterms[ij] = a.terms[i] * b.terms[j];
+        }
+    }
+
+    return AExpression(newterms);
+}
+
+AExpression operator*(const AExpression &a, const double &b) {
+    std::vector<ATerm> newterms(a.terms.size());
+
+    for (unsigned int i = 0; i < a.terms.size(); i++) {
+        newterms[i] = a.terms[i] * b;
+    }
+
+    return AExpression(newterms);
+}
+
+AExpression operator*(const double &a, const AExpression &b) {
+    return (b * a);
+}
+
+AExpression operator*(const AExpression &a, const int &b) {
+    std::vector<ATerm> newterms(a.terms.size());
+
+    for (unsigned int i = 0; i < a.terms.size(); i++) {
+        newterms[i] = a.terms[i] * b;
+    }
+
+    return AExpression(newterms);
+}
+
+AExpression operator*(const int &a, const AExpression &b) {
+    return (b * a);
+}
+
+bool operator==(const AExpression &a, const AExpression &b) {
+    if (a.terms.size() != b.terms.size()) {
+        return false;
+    }
+
+    for (unsigned int i = 0; i < a.terms.size(); i++) {
+        if (a.terms[i] != b.terms[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool operator!=(const AExpression &a, const AExpression &b) {
+    return (!(a == b));
+}

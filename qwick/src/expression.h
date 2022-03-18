@@ -243,5 +243,15 @@ class AExpression {
     std::string _print_einsum(const std::string lhs="") const;
 };
 
+AExpression operator+(const AExpression &a, const AExpression &b);
+AExpression operator-(const AExpression &a, const AExpression &b);
+AExpression operator*(const AExpression &a, const AExpression &b);
+AExpression operator*(const AExpression &a, const double &b);
+AExpression operator*(const double &a, const AExpression &b);
+AExpression operator*(const AExpression &a, const int &b);
+AExpression operator*(const int &a, const AExpression &b);
+bool operator==(const AExpression &a, const AExpression &b);
+bool operator!=(const AExpression &a, const AExpression &b);
+
 
 #endif  // QWICK_SRC_EXPRESSION_H_
