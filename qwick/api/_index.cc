@@ -26,8 +26,8 @@ void export_index(py::module &m) {
 }
 
 PYBIND11_MODULE(_index, m) {
-    m.attr("__name__") = "cwick._index";
-    m.doc() = "C++ interface to cwick._index";
+    m.attr("__name__") = "qwick._index";
+    m.doc() = "C++ interface to qwick._index";
 
     export_index(m);
 }

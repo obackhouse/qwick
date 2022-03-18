@@ -2,8 +2,8 @@
  *  Indices
  */
 
-#ifndef CWICK_SRC_INDEX_H_
-#define CWICK_SRC_INDEX_H_
+#ifndef QWICK_SRC_INDEX_H_
+#define QWICK_SRC_INDEX_H_
 
 #include <string>
 #include <vector>
@@ -54,4 +54,4 @@ struct IdxStringPairHash {
     }
 };
 
-#endif  // CWICK_SRC_INDEX_H_
+#endif  // QWICK_SRC_INDEX_H_

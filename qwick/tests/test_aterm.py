@@ -1,11 +1,11 @@
 import unittest
 
-from cwick.index import Idx
-from cwick.operator import Tensor, Delta, Sigma, tensor_from_delta
-from cwick.expression import AExpression, ATerm
-from cwick.convenience import one_e, two_e, braE2, braE1, ketE1
-from cwick.convenience import E0, E1, E2
-from cwick.wick import apply_wick
+from qwick.index import Idx
+from qwick.operator import Tensor, Delta, Sigma, tensor_from_delta
+from qwick.expression import AExpression, ATerm
+from qwick.convenience import one_e, two_e, braE2, braE1, ketE1
+from qwick.convenience import E0, E1, E2
+from qwick.wick import apply_wick
 
 
 class ATermTest(unittest.TestCase):

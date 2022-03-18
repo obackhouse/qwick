@@ -20,8 +20,8 @@ void export_wick(py::module &m) {
 }
 
 PYBIND11_MODULE(_wick, m) {
-    m.attr("__name__") = "cwick._wick";
-    m.doc() = "C++ interface to cwick._wick";
+    m.attr("__name__") = "qwick._wick";
+    m.doc() = "C++ interface to qwick._wick";
 
     export_wick(m);
 }

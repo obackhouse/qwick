@@ -1,11 +1,11 @@
 import unittest
 
-from cwick.index import Idx
-from cwick.expression import Term, Expression, AExpression
-from cwick.operator import FOperator, BOperator, Projector
-from cwick.wick import valid_contraction, pair_list
-from cwick.wick import get_sign, split_operators, apply_wick
-from cwick.convenience import one_e
+from qwick.index import Idx
+from qwick.expression import Term, Expression, AExpression
+from qwick.operator import FOperator, BOperator, Projector
+from qwick.wick import valid_contraction, pair_list
+from qwick.wick import get_sign, split_operators, apply_wick
+from qwick.convenience import one_e
 
 
 class WickTest(unittest.TestCase):

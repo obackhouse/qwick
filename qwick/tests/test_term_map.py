@@ -1,7 +1,7 @@
 import unittest
-from cwick.operator import Tensor, Sigma
-from cwick.expression import ATerm
-from cwick.index import Idx
+from qwick.operator import Tensor, Sigma
+from qwick.expression import ATerm
+from qwick.index import Idx
 
 
 class TermMapTest(unittest.TestCase):

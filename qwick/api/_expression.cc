@@ -191,8 +191,8 @@ void export_expression(py::module &m) {
 }
 
 PYBIND11_MODULE(_expression, m) {
-    m.attr("__name__") = "cwick._expression";
-    m.doc() = "C++ interface to cwick._expression";
+    m.attr("__name__") = "qwick._expression";
+    m.doc() = "C++ interface to qwick._expression";
 
     export_expression(m);
 }

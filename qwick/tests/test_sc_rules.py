@@ -1,12 +1,12 @@
 import unittest
 from fractions import Fraction
 
-from cwick.index import Idx
-from cwick.operator import Sigma, Tensor
-from cwick.expression import Term, Expression, ATerm, AExpression
-from cwick.wick import apply_wick
-from cwick.convenience import one_e, two_e, get_sym
-from cwick.convenience import ketE1, ketE2, braE1, braE2
+from qwick.index import Idx
+from qwick.operator import Sigma, Tensor
+from qwick.expression import Term, Expression, ATerm, AExpression
+from qwick.wick import apply_wick
+from qwick.convenience import one_e, two_e, get_sym
+from qwick.convenience import ketE1, ketE2, braE1, braE2
 
 
 class SCRulesTest(unittest.TestCase):

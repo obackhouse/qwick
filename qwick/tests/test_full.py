@@ -2,10 +2,10 @@ import os
 import unittest
 from fractions import Fraction
 
-from cwick.expression import AExpression
-from cwick.wick import apply_wick
-from cwick.convenience import one_e, two_e, two_p, commute
-from cwick.convenience import braE1, E1, E2, braP2, P2
+from qwick.expression import AExpression
+from qwick.wick import apply_wick
+from qwick.convenience import one_e, two_e, two_p, commute
+from qwick.convenience import braE1, E1, E2, braP2, P2
 
 
 def get_ref(fname):

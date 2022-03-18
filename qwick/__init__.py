@@ -35,7 +35,7 @@ operator.BOperator = BOperator
 
 # Register the modules:
 
-sys.modules["cwick.index"] = index
-sys.modules["cwick.operator"] = operator
-sys.modules["cwick.expression"] = expression
-sys.modules["cwick.wick"] = wick
+sys.modules["qwick.index"] = index
+sys.modules["qwick.operator"] = operator
+sys.modules["qwick.expression"] = expression
+sys.modules["qwick.wick"] = wick

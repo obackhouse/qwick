@@ -1,8 +1,8 @@
 import unittest
 
-from cwick.index import Idx
-from cwick.operator import FOperator, Sigma, Tensor, Delta
-from cwick.expression import Term, Expression
+from qwick.index import Idx
+from qwick.operator import FOperator, Sigma, Tensor, Delta
+from qwick.expression import Term, Expression
 
 
 class ExpressionTest(unittest.TestCase):

@@ -87,8 +87,8 @@ void export_operator(py::module &m) {
 }
 
 PYBIND11_MODULE(_operator, m) {
-    m.attr("__name__") = "cwick._operator";
-    m.doc() = "C++ interface to cwick._operator";
+    m.attr("__name__") = "qwick._operator";
+    m.doc() = "C++ interface to qwick._operator";
 
     export_operator(m);
 }

@@ -1,20 +1,20 @@
 import unittest
-from cwick.index import Idx
-from cwick.operator import Delta, Tensor, TensorSym
-from cwick.expression import Term, ATerm, Expression, AExpression
-from cwick.wick import apply_wick
-from cwick.convenience import get_sym, get_sym_ip2, get_sym_ea2
-from cwick.convenience import E1, E2, Eip1, Eea1, Eip2, Eea2, P1, P2
-from cwick.convenience import EPS1, EP1ip1, EP1ea1, EPS2
-from cwick.convenience import braE1, braE2
-from cwick.convenience import braEip1, braEip2, braEdip1
-from cwick.convenience import braEea1, braEea2, braEdea1
-from cwick.convenience import ketE1, ketE2
-from cwick.convenience import ketEip1, ketEip2, ketEdip1
-from cwick.convenience import ketEea1, ketEea2, ketEdea1
-from cwick.convenience import braP1, braP2, braP1E1, braP1Eip1, braP1Eea1
-from cwick.convenience import ketP1, ketP2, ketP1E1, ketP1Eip1, ketP1Eea1
-from cwick.convenience import braP2E1, one_p, two_p, ep11
+from qwick.index import Idx
+from qwick.operator import Delta, Tensor, TensorSym
+from qwick.expression import Term, ATerm, Expression, AExpression
+from qwick.wick import apply_wick
+from qwick.convenience import get_sym, get_sym_ip2, get_sym_ea2
+from qwick.convenience import E1, E2, Eip1, Eea1, Eip2, Eea2, P1, P2
+from qwick.convenience import EPS1, EP1ip1, EP1ea1, EPS2
+from qwick.convenience import braE1, braE2
+from qwick.convenience import braEip1, braEip2, braEdip1
+from qwick.convenience import braEea1, braEea2, braEdea1
+from qwick.convenience import ketE1, ketE2
+from qwick.convenience import ketEip1, ketEip2, ketEdip1
+from qwick.convenience import ketEea1, ketEea2, ketEdea1
+from qwick.convenience import braP1, braP2, braP1E1, braP1Eip1, braP1Eea1
+from qwick.convenience import ketP1, ketP2, ketP1E1, ketP1Eip1, ketP1Eea1
+from qwick.convenience import braP2E1, one_p, two_p, ep11
 
 
 class ConvenienceTest(unittest.TestCase):

@@ -1,8 +1,8 @@
 import unittest
 
-from cwick.index import Idx
-from cwick.operator import FOperator, BOperator, Projector
-from cwick.operator import Delta, Tensor, Sigma
+from qwick.index import Idx
+from qwick.operator import FOperator, BOperator, Projector
+from qwick.operator import Delta, Tensor, Sigma
 
 
 class OperatorTest(unittest.TestCase):

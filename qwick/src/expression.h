@@ -2,8 +2,8 @@
  *  Expressions
  */
 
-#ifndef CWICK_SRC_EXPRESSION_H_
-#define CWICK_SRC_EXPRESSION_H_
+#ifndef QWICK_SRC_EXPRESSION_H_
+#define QWICK_SRC_EXPRESSION_H_
 
 #include <unordered_set>
 #include <unordered_map>
@@ -244,4 +244,4 @@ class AExpression {
 };
 
 
-#endif  // CWICK_SRC_EXPRESSION_H_
+#endif  // QWICK_SRC_EXPRESSION_H_

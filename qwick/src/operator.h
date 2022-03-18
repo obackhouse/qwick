@@ -2,8 +2,8 @@
  *  Operators
  */
 
-#ifndef CWICK_SRC_OPERATOR_H_
-#define CWICK_SRC_OPERATOR_H_
+#ifndef QWICK_SRC_OPERATOR_H_
+#define QWICK_SRC_OPERATOR_H_
 
 #include <string>
 #include <vector>
@@ -150,4 +150,4 @@ Tensor tensor_from_delta(const Delta &d);
 bool is_normal_ordered(const std::vector<Operator> &operators);
 std::pair<std::vector<Operator>, int> normal_ordered(const std::vector<Operator> &operators, const int sign = 1);
 
-#endif  // CWICK_SRC_OPERATOR_H_
+#endif  // QWICK_SRC_OPERATOR_H_

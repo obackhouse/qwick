@@ -2,8 +2,8 @@
  *  Wick theorem
  */
 
-#ifndef CWICK_SRC_WICK_H_
-#define CWICK_SRC_WICK_H_
+#ifndef QWICK_SRC_WICK_H_
+#define QWICK_SRC_WICK_H_
 
 #include <utility>
 #include <vector>
@@ -19,4 +19,4 @@ std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops);
 Expression apply_wick(Expression e);
 
 
-#endif  // CWICK_SRC_WICK_H_
+#endif  // QWICK_SRC_WICK_H_

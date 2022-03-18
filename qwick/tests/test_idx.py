@@ -1,6 +1,6 @@
 import unittest
 
-from cwick.index import Idx, is_occupied, idx_copy
+from qwick.index import Idx, is_occupied, idx_copy
 
 
 class IdxTest(unittest.TestCase):

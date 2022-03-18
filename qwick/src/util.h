@@ -2,8 +2,8 @@
  *  C++ specific utilities
  */
 
-#ifndef CWICK_SRC_UTIL_H_
-#define CWICK_SRC_UTIL_H_
+#ifndef QWICK_SRC_UTIL_H_
+#define QWICK_SRC_UTIL_H_
 
 #define TRAILING_ZERO_PRECISION 12
 
@@ -37,4 +37,4 @@ std::vector<T> apply_argsort(const std::vector<T> &vec, const std::vector<std::s
     return sorted_vec;
 }
 
-#endif  // CWICK_SRC_UTIL_H_
+#endif  // QWICK_SRC_UTIL_H_
