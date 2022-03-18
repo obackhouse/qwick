@@ -618,9 +618,7 @@ Term operator*(const Term &a, const Term &b) {
     for (unsigned int i = 0; i < il2.size(); i++) {
         sil2.insert(il2[i]);
     }
-    for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-         itr != sil1.end();
-         itr++) {
+    for (auto itr = sil1.begin(); itr != sil1.end(); itr++) {
         if (sil2.find(*itr) != sil2.end()) {
             sil12_intersection.insert(*itr);
         }
@@ -629,9 +627,7 @@ Term operator*(const Term &a, const Term &b) {
     Term newb;
     if (sil12_intersection.size() != 0) {
         int m = -1;
-        for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-             itr != sil1.end();
-             itr++) {
+        for (auto itr = sil1.begin(); itr != sil1.end(); itr++) {
             m = ((*itr).index > m) ? (*itr).index : m;
         }
         assert(m != -1);
@@ -653,11 +649,11 @@ Term operator*(const Term &a, const Term &b) {
     newdeltas.insert(newdeltas.end(), newb.deltas.begin(), newb.deltas.end());
 
     std::unordered_map<std::string, std::string> new_index_key;
-
-    if (a.index_key == default_index_key) {
-        new_index_key = b.index_key;
-    } else {
-        new_index_key = a.index_key;
+    for (auto itr = a.index_key.begin(); itr != a.index_key.end(); itr++) {
+        new_index_key[itr->first] = itr->second;
+    }
+    for (auto itr = b.index_key.begin(); itr != b.index_key.end(); itr++) {
+        new_index_key[itr->first] = itr->second;
     }
 
     Term newterm(newscalar, newsums, newtensors, newoperators, newdeltas, new_index_key);
@@ -1123,9 +1119,7 @@ ATerm operator*(const ATerm &a, const ATerm &b) {
     for (unsigned int i = 0; i < il2.size(); i++) {
         sil2.insert(il2[i]);
     }
-    for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-         itr != sil1.end();
-         itr++) {
+    for (auto itr = sil1.begin(); itr != sil1.end(); itr++) {
         if (sil2.find(*itr) != sil2.end()) {
             sil12_intersection.insert(*itr);
         }
@@ -1134,9 +1128,7 @@ ATerm operator*(const ATerm &a, const ATerm &b) {
     ATerm newb;
     if (sil12_intersection.size() != 0) {
         int m = -1;
-        for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-             itr != sil1.end();
-             itr++) {
+        for (auto itr = sil1.begin(); itr != sil1.end(); itr++) {
             m = ((*itr).index > m) ? (*itr).index : m;
         }
         assert(m != -1);
@@ -1155,10 +1147,11 @@ ATerm operator*(const ATerm &a, const ATerm &b) {
 
     std::unordered_map<std::string, std::string> new_index_key;
 
-    if (a.index_key == default_index_key) {
-        new_index_key = b.index_key;
-    } else {
-        new_index_key = a.index_key;
+    for (auto itr = a.index_key.begin(); itr != a.index_key.end(); itr++) {
+        new_index_key[itr->first] = itr->second;
+    }
+    for (auto itr = b.index_key.begin(); itr != b.index_key.end(); itr++) {
+        new_index_key[itr->first] = itr->second;
     }
 
     ATerm newterm(newscalar, newsums, newtensors, new_index_key);

@@ -296,7 +296,7 @@ Expression apply_wick(Expression e) {
                 deltas.push_back((*k).copy());
             }
 
-            Term t1(scalar, sums, tensors, operators, deltas, default_index_key);
+            Term t1(scalar, sums, tensors, operators, deltas, temp.index_key);
             to.push_back(t1);
         }
     }

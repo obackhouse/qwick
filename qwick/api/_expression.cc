@@ -41,7 +41,7 @@ void export_expression(py::module &m) {
                 std::vector<Operator> operators,
                 std::vector<Delta> deltas,
                 py::none index_key) {
-                    return Term(scalar, sums, tensors, operators, deltas);
+                    return Term(scalar, sums, tensors, operators, deltas, default_index_key);
                 }),
                 py::arg("scalar")=1.0,
                 py::arg("sums")=std::vector<Sigma>(),
@@ -91,7 +91,7 @@ void export_expression(py::module &m) {
                 std::vector<Sigma> sums,
                 std::vector<Tensor> tensors,
                 py::none index_key) {
-                    return ATerm(scalar, sums, tensors);
+                    return ATerm(scalar, sums, tensors, default_index_key);
                 }),
                 py::arg("scalar")=1.0,
                 py::arg("sums")=std::vector<Sigma>(),
