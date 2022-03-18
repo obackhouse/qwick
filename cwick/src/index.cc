@@ -5,23 +5,19 @@
 #include "util.h"
 #include "index.h"
 
-#include<string>
-#include<vector>
-#include<algorithm>
 
 Idx::Idx() {}
 
-Idx::Idx(int _index, std::string _space, bool _fermion) {
+Idx::Idx(const int _index,
+         const std::string _space,
+         const bool _fermion) {
     index = _index;
     space = _space;
     fermion = _fermion;
 }
 
-std::string Idx::repr() {
-    std::string open = "(";
-    std::string close = ")";
-    std::string out = std::to_string(index) + open + space + close;
-    return out;
+std::string Idx::repr() const {
+    return std::to_string(index) + "(" + space + ")";
 }
 
 bool operator==(const Idx &a, const Idx &b) {
@@ -29,21 +25,17 @@ bool operator==(const Idx &a, const Idx &b) {
 }
 
 bool operator!=(const Idx &a, const Idx &b) {
-    return !(a == b);
+    return (!(a == b));
 }
 
 bool operator<(const Idx &a, const Idx &b) {
-    bool out;
-
     if (a.space < b.space) {
-        out = true;
+        return true;
     } else if (a.space == b.space) {
-        out = a.index < b.index;
+        return a.index < b.index;
     } else {
-        out = false;
+        return false;
     }
-
-    return out;
 }
 
 bool operator<=(const Idx &a, const Idx &b) {
@@ -51,27 +43,21 @@ bool operator<=(const Idx &a, const Idx &b) {
 }
 
 bool operator>(const Idx &a, const Idx &b) {
-    return !(a <= b);
+    return (!(a <= b));
 }
 
 bool operator>=(const Idx &a, const Idx &b) {
-    return !(a < b);
+    return (!(a < b));
 }
 
 Idx idx_copy(const Idx &a) {
-    Idx b(a.index, a.space, a.fermion);
-    return b;
+    return Idx(a.index, a.space, a.fermion);
 }
 
-bool is_occupied(const Idx &a, const std::vector<std::string> occ) {
-    bool out = false;
-
+bool is_occupied(const Idx &a, const std::vector<std::string> &occ) {
     if (occ.size() == 0) {
-        out = (a.space.find("o") != std::string::npos);
+        return (a.space.find("o") != std::string::npos);
+    } else {
+        return (std::find(occ.begin(), occ.end(), a.space) != occ.end());
     }
-    else {
-        out = (std::find(occ.begin(), occ.end(), a.space) != occ.end());
-    }
-
-    return out;
 }

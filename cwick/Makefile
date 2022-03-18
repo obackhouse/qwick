@@ -1,5 +1,5 @@
 GCC=g++
-CFLAGS=-Wall -std=c++17 -shared -fPIC
+CFLAGS=-Wall -O2 -std=c++17 -shared -fPIC
 SRC=$(shell pwd)/src
 BUILD=$(shell pwd)/build
 API=$(shell pwd)/api

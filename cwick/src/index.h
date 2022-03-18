@@ -2,27 +2,31 @@
  *  Indices
  */
 
-#ifndef INDEX_H
-#define INDEX_H
+#ifndef CWICK_SRC_INDEX_H_
+#define CWICK_SRC_INDEX_H_
 
 #include <string>
 #include <vector>
-#include <algorithm>
+#include <utility>
 #include <variant>
+#include <algorithm>
 
-using int_or_string = std::variant<int, std::string>;
 
-class Idx{
-    public:
-        int index;
-        std::string space;
-        bool fermion;
+class Idx {
+ public:
+    // Attributes
+    int index;
+    std::string space;
+    bool fermion;
 
-        Idx();
-        Idx(int _index, std::string _space, bool _fermion=true);
-        Idx(std::string _index, std::string _space, bool _fermion=true);
+    // Constructors
+    Idx();
+    Idx(const int index,
+        const std::string space,
+        const bool fermion = true);
 
-        std::string repr();
+    // String formatting
+    std::string repr() const;
 };
 
 bool operator==(const Idx &a, const Idx &b);
@@ -34,25 +38,20 @@ bool operator>=(const Idx &a, const Idx &b);
 
 Idx idx_copy(const Idx &a);
 
-bool is_occupied(const Idx &a, const std::vector<std::string> occ = std::vector<std::string>());
-
-template <class T>
-inline void hash_combine(std::size_t& seed, T const& v){
-    seed ^= std::hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
+bool is_occupied(const Idx &a, const std::vector<std::string> &occ = std::vector<std::string>());
 
 struct IdxHash {
-    std::size_t operator()(Idx i) const {
+    std::size_t operator()(const Idx i) const {
         return std::hash<std::string>()(i.repr());
     }
 };
 
 struct IdxStringPairHash {
-    std::size_t operator()(std::pair<std::string, Idx> p) const {
+    std::size_t operator()(const std::pair<std::string, Idx> p) const {
         std::size_t seed = std::hash<std::string>()(p.second.repr());
-        hash_combine(seed, p.first);
+        seed ^= std::hash<std::string>()(p.first) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         return seed;
     }
 };
 
-#endif
+#endif  // CWICK_SRC_INDEX_H_

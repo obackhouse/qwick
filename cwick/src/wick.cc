@@ -8,7 +8,7 @@
 
 
 // TODO occ keyword
-bool valid_contraction(Operator o1, Operator o2) {
+bool valid_contraction(const Operator &o1, const Operator &o2) {
     if (o1.idx.space != o2.idx.space) {
         return false;
     }
@@ -21,14 +21,12 @@ bool valid_contraction(Operator o1, Operator o2) {
             return true;
         }
         return false;
-    }
-    else if (!(o1.fermion) && !(o2.fermion)) {
+    } else if (!(o1.fermion) && !(o2.fermion)) {
         if (!(o1.ca) && o2.ca) {
             return true;
         }
         return false;
-    }
-    else if (o1.fermion == o2.fermion) {
+    } else if (o1.fermion == o2.fermion) {
         return true;
     }
 
@@ -36,39 +34,32 @@ bool valid_contraction(Operator o1, Operator o2) {
 }
 
 // TODO occ keyword
-std::vector<std::vector<std::pair<Operator, Operator>>> pair_list(std::vector<Operator> lst) {
+std::vector<std::vector<std::pair<Operator, Operator>>> pair_list(const std::vector<Operator> &lst) {
     int n = lst.size();
     assert(n % 2 == 0);
 
     if (n < 2) {
         return {};
-    }
-    else if (n == 2) {
+    } else if (n == 2) {
         if (valid_contraction(lst[0], lst[1])) {
-            std::pair<Operator, Operator> p;
-            p.first = lst[0];
-            p.second = lst[1];
+            std::pair<Operator, Operator> p(lst[0], lst[1]);
             return {{p}};
-        }
-        else {
+        } else {
             return {};
         }
-    }
-    else {
+    } else {
         std::vector<std::vector<std::pair<Operator, Operator>>> plist;
         std::vector<Operator> ltmp(lst.begin() + 1, lst.end());
         for (unsigned int i = 0; i < ltmp.size(); i++) {
             if (valid_contraction(lst[0], ltmp[i])) {
-                std::pair<Operator, Operator> p1;
-                p1.first = lst[0];
-                p1.second = ltmp[i];
+                std::pair<Operator, Operator> p1(lst[0], ltmp[i]);
 
-                std::vector<Operator> lrem;
+                std::vector<Operator> lrem(ltmp.size()-1);
                 for (unsigned int j = 0; j < i; j++) {
-                    lrem.push_back(ltmp[j]);
+                    lrem[j] = ltmp[j];
                 }
                 for (unsigned int j = i+1; j < ltmp.size(); j++) {
-                    lrem.push_back(ltmp[j]);
+                    lrem[j-1] = ltmp[j];
                 }
 
                 std::vector<std::vector<std::pair<Operator, Operator>>> rem = pair_list(lrem);
@@ -84,29 +75,26 @@ std::vector<std::vector<std::pair<Operator, Operator>>> pair_list(std::vector<Op
 }
 
 // pair(-1,-1) returned instead of None
-std::pair<int, int> find_pair(int i, std::vector<std::pair<int, int>> ipairs) {
+std::pair<int, int> find_pair(const int i, const std::vector<std::pair<int, int>> &ipairs) {
     for (unsigned int p = 0; p < ipairs.size(); p++) {
         if ((ipairs[p].first == i) || (ipairs[p].second == i)) {
             return ipairs[p];
         }
     }
 
-    std::pair<int, int> p;
-    p.first = -1;
-    p.second = -1;
-
+    std::pair<int, int> p(-1, -1);
     return p;
 }
-        
-int get_sign(std::vector<std::pair<int, int>> ipairs) {
+
+int get_sign(std::vector<std::pair<int, int>> &ipairs) {
     int ncross = 0;
 
     for (unsigned int p = 0; p < ipairs.size(); p++) {
-        int i = ipairs[p].first;
-        int j = ipairs[p].second;
+        const int i = ipairs[p].first;
+        const int j = ipairs[p].second;
 
         for (int x1 = i+1; x1 < j; x1++) {
-            std::pair<int, int> p1 = find_pair(x1, ipairs);
+            const std::pair<int, int> p1 = find_pair(x1, ipairs);
 
             if ((p1.first == -1) && (p1.second == -1)) {
                 continue;
@@ -137,7 +125,8 @@ int get_sign(std::vector<std::pair<int, int>> ipairs) {
     return out;
 }
 
-std::vector<std::vector<Operator>> split_operators(std::vector<Operator> ops) {
+std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops) {
+    // TODO prealloc
     std::vector<int> ps;
     for (unsigned int i = 0; i < ops.size(); i++) {
         if (ops[i].projector) {
@@ -149,24 +138,25 @@ std::vector<std::vector<Operator>> split_operators(std::vector<Operator> ops) {
         return {ops};
     }
 
-    std::vector<int> starts = {0};
+    std::vector<int> starts(ps.size()+1);
+    starts[0] = 0;
     for (unsigned int i = 0; i < ps.size(); i++) {
-        starts.push_back(ps[i] + 1);
+        starts[i+1] = ps[i] + 1;
     }
 
     std::vector<int> ends(ps);
     ends.push_back(ops.size());
 
-    std::vector<std::vector<Operator>> olists;
+    std::vector<std::vector<Operator>> olists(starts.size());
     assert(starts.size() == ends.size());
     for (unsigned int i = 0; i < starts.size(); i++) {
         int s = starts[i];
         int e = ends[i];
-        std::vector<Operator> olists_i;
+        std::vector<Operator> olists_i(e-s);
         for (int j = s; j < e; j++) {
-            olists_i.push_back(ops[j]);
+            olists_i[j-s] = ops[j];
         }
-        olists.push_back(olists_i);
+        olists[i] = olists_i;
     }
 
     return olists;
@@ -231,37 +221,19 @@ Expression apply_wick(Expression e) {
                         break;
                     }
                     if (!(oi.idx.fermion)) {
-                        Idx i1 = oi.idx;
-                        Idx i2 = oj.idx;
-                        deltas.push_back(Delta(i1, i2));
-                    }
-                    else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
+                        deltas.push_back(Delta(oi.idx, oj.idx));
+                    } else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
                              ((!(is_occupied(oi.idx))) && (!(oi.ca)) && oj.ca)) {
-                        unsigned int ii = olists[j].size();
-                        for (ii = 0; ii < olists[j].size(); ii++) {
-                            if (oi == olists[j][ii]) {
-                                break;
-                            }
-                        }
-                        assert(ii != olists[j].size());
-                        unsigned int jj = olists[j].size();
-                        for (jj = 0; jj < olists[j].size(); jj++) {
-                            if (oj == olists[j][jj]) {
-                                break;
-                            }
-                        }
-                        assert(ii != olists[j].size());
+                        auto itr = std::find(olists[j].begin(), olists[j].end(), oi);
+                        unsigned int ii = std::distance(olists[j].begin(), itr);
 
-                        std::pair<int, int> p;
-                        p.first = ii;
-                        p.second = jj;
+                        itr = std::find(olists[j].begin(), olists[j].end(), oj);
+                        unsigned int jj = std::distance(olists[j].begin(), itr);
+
+                        std::pair<int, int> p(ii, jj);
                         ipairs.push_back(p);
-
-                        Idx i1 = oi.idx;
-                        Idx i2 = oj.idx;
-                        deltas.push_back(Delta(i1, i2));
-                    }
-                    else {
+                        deltas.push_back(Delta(oi.idx, oj.idx));
+                    } else {
                         good = false;
                         break;
                     }
@@ -280,9 +252,7 @@ Expression apply_wick(Expression e) {
         assert(sos.size() == dos.size());
         // Loop over a cartesian product of elements of dos and sos
         // https://stackoverflow.com/questions/5279051
-        auto product = [](long long a, std::vector<int>& b) {
-            return a*b.size();
-        };
+        auto product = [](long long a, std::vector<int>& b) { return a*b.size(); };
         const long long N = std::accumulate(sos.begin(), sos.end(), 1LL, product);
         std::vector<std::vector<Delta>> dos_prod(sos.size());
         std::vector<int> sos_prod(sos.size());
@@ -312,21 +282,21 @@ Expression apply_wick(Expression e) {
 
             double scalar = sign * temp.scalar;
 
-            std::vector<Sigma> sums;
-            std::vector<Tensor> tensors;
-            std::vector<Operator> operators;
+            std::vector<Sigma> sums(temp.sums.size());
+            std::vector<Tensor> tensors(temp.tensors.size());
+            std::vector<Operator> operators(0);
 
-            for (auto k = temp.sums.begin(); k < temp.sums.end(); k++) {
-                sums.push_back((*k).copy());
+            for (unsigned int k = 0; k < temp.sums.size(); k++) {
+                sums[k] = temp.sums[k].copy();
             }
-            for (auto k = temp.tensors.begin(); k < temp.tensors.end(); k++) {
-                tensors.push_back((*k).copy());
+            for (unsigned int k = 0; k < temp.tensors.size(); k++) {
+                tensors[k] = temp.tensors[k].copy();
             }
             for (auto k = temp.deltas.begin(); k < temp.deltas.end(); k++) {
                 deltas.push_back((*k).copy());
             }
 
-            Term t1(scalar, sums, tensors, operators, deltas, default_index_key());;
+            Term t1(scalar, sums, tensors, operators, deltas, default_index_key);
             to.push_back(t1);
         }
     }

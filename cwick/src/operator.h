@@ -2,65 +2,86 @@
  *  Operators
  */
 
-#ifndef OPERATOR_H
-#define OPERATOR_H
-
-#include "index.h"
+#ifndef CWICK_SRC_OPERATOR_H_
+#define CWICK_SRC_OPERATOR_H_
 
 #include <string>
 #include <vector>
 #include <cassert>
+#include <utility>
 #include <unordered_set>
 #include <unordered_map>
 
+#include "index.h"
+
+
+// Operator
+
 class Operator{
-    public:
-        Idx idx;
-        bool ca;
-        bool fermion;
-        bool projector;
+ public:
+    // Attributes
+    Idx idx;
+    bool ca;
+    bool fermion;
+    bool projector;
 
-        Operator();
-        Operator(const Idx _idx, bool _ca, bool _fermion=true);
+    // Constructors
+    Operator();
+    Operator(const Idx &_idx, const bool _ca, const bool _fermion = true);
 
-        std::string repr();
-        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
-        Operator _inc(int i);
-        Operator dagger();
-        Operator copy();
-        bool qp_creation();
-        bool qp_annihilation();
+    // Functions
+    Operator _inc(const int i) const;
+    Operator dagger() const;
+    Operator copy() const;
+    bool qp_creation() const;
+    bool qp_annihilation() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str(const std::unordered_map<Idx, std::string, IdxHash> &imap) const;
 };
 
 bool operator==(const Operator &a, const Operator &b);
 bool operator!=(const Operator &a, const Operator &b);
 
-class TensorSym {
-    public:
-        std::vector<std::vector<int>> plist;
-        std::vector<int> signs;
-        std::vector<std::pair<std::vector<int>, int>> tlist;
 
-        TensorSym();
-        TensorSym(const std::vector<std::vector<int>> _plist, std::vector<int> _signs);
+// Tensor
+
+class TensorSym {
+ public:
+    // Attributes
+    std::vector<std::vector<int>> plist;
+    std::vector<int> signs;
+    std::vector<std::pair<std::vector<int>, int>> tlist;
+
+    // Constructors
+    TensorSym();
+    TensorSym(const std::vector<std::vector<int>> &plist, const std::vector<int> &signs);
 };
 
 class Tensor {
-    public:
-        std::vector<Idx> indices;
-        std::string name;
-        TensorSym sym;
+ public:
+    // Attributes
+    std::vector<Idx> indices;
+    std::string name;
+    TensorSym sym;
 
-        Tensor();
-        Tensor(const std::vector<Idx> _indices, const std::string _name, const TensorSym _sym=TensorSym());
+    // Constructors
+    Tensor();
+    Tensor(const std::vector<Idx> &indices,
+           const std::string &name,
+           const TensorSym &sym = TensorSym());
 
-        Tensor _inc(int i);
-        std::vector<Idx> ilist();
-        std::string repr();
-        std::string _istr(std::unordered_map<Idx, std::string, IdxHash> imap);
-        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
-        void transpose(std::vector<int>);
-        Tensor copy();
+    // Functions
+    Tensor _inc(const int i) const;
+    std::vector<Idx> ilist() const;
+    void transpose(const std::vector<int> &perm);
+    Tensor copy() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _istr(const std::unordered_map<Idx, std::string, IdxHash> &imap) const;
+    std::string _print_str(const std::unordered_map<Idx, std::string, IdxHash> &imap) const;
 };
 
 bool operator==(const Tensor &a, const Tensor &b);
@@ -70,19 +91,27 @@ bool operator<=(const Tensor &a, const Tensor &b);
 bool operator>(const Tensor &a, const Tensor &b);
 bool operator>=(const Tensor &a, const Tensor &b);
 
-Tensor permute(Tensor t, std::vector<int> p);
+Tensor permute(const Tensor &t, const std::vector<int> &p);
+
+
+// Sigma
 
 class Sigma {
-    public:
-        Idx idx;
+ public:
+    // Attributes
+    Idx idx;
 
-        Sigma();
-        Sigma(Idx _idx);
+    // Constructors
+    Sigma();
+    explicit Sigma(const Idx &idx);
 
-        Sigma _inc(int i);
-        std::string repr();
-        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
-        Sigma copy();
+    // Functions
+    Sigma _inc(const int i) const;
+    Sigma copy() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str(const std::unordered_map<Idx, std::string, IdxHash> &imap) const;
 };
 
 bool operator==(const Sigma &a, const Sigma &b);
@@ -92,25 +121,33 @@ bool operator>(const Sigma &a, const Sigma &b);
 bool operator<=(const Sigma &a, const Sigma &b);
 bool operator>=(const Sigma &a, const Sigma &b);
 
+
+// Delta
+
 class Delta {
-    public:
-        Idx i1;
-        Idx i2;
+ public:
+    // Attributes
+    Idx i1;
+    Idx i2;
 
-        Delta();
-        Delta(Idx _i1, Idx _i2);
+    // Constructors
+    Delta();
+    Delta(const Idx &_i1, const Idx &_i2);
 
-        std::string repr();
-        std::string _print_str(std::unordered_map<Idx, std::string, IdxHash> imap);
-        Delta _inc(int i);
-        Delta copy();
+    // Functions
+    Delta _inc(const int i) const;
+    Delta copy() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str(const std::unordered_map<Idx, std::string, IdxHash> &imap) const;
 };
 
 bool operator==(const Delta &a, const Delta &b);
 bool operator!=(const Delta &a, const Delta &b);
 
-Tensor tensor_from_delta(Delta d);
-bool is_normal_ordered(std::vector<Operator> operators);
-std::pair<std::vector<Operator>, int> normal_ordered(std::vector<Operator> operators, int sign=1);
+Tensor tensor_from_delta(const Delta &d);
+bool is_normal_ordered(const std::vector<Operator> &operators);
+std::pair<std::vector<Operator>, int> normal_ordered(const std::vector<Operator> &operators, const int sign = 1);
 
-#endif
+#endif  // CWICK_SRC_OPERATOR_H_

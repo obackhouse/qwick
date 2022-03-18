@@ -32,7 +32,7 @@ void export_expression(py::module &m) {
                 py::arg("tensors")=std::vector<Tensor>(),
                 py::arg("operators")=std::vector<Operator>(),
                 py::arg("deltas")=std::vector<Delta>(),
-                py::arg("index_key")=default_index_key()
+                py::arg("index_key")=default_index_key
         )
         .def(py::init([](
                 double scalar,
@@ -84,7 +84,7 @@ void export_expression(py::module &m) {
                 py::arg("scalar")=1.0,
                 py::arg("sums")=std::vector<Sigma>(),
                 py::arg("tensors")=std::vector<Tensor>(),
-                py::arg("index_key")=default_index_key()
+                py::arg("index_key")=default_index_key
         )
         .def(py::init([](
                 double scalar,

@@ -2,17 +2,22 @@
  *  Expressions
  */
 
-#ifndef EXPRESSION_H
-#define EXPRESSION_H
+#ifndef CWICK_SRC_EXPRESSION_H_
+#define CWICK_SRC_EXPRESSION_H_
 
-#include<unordered_set>
-#include<unordered_map>
-#include<vector>
-#include<numeric>
-#include<algorithm>
+#include <unordered_set>
+#include <unordered_map>
+#include <vector>
+#include <numeric>
+#include <algorithm>
+#include <utility>
+#include <string>
 
 #include "index.h"
 #include "operator.h"
+
+
+// TermMap
 
 using TERM_MAP_SUB_DATA_TYPE = std::pair<std::string, std::unordered_set<std::string>>;
 
@@ -44,11 +49,13 @@ struct TermMapDataHash {
 };
 
 class TermMap {
-    public:
-        std::unordered_set<TERM_MAP_DATA_TYPE, TermMapDataHash> data;  // TODO this needs to be a set
+ public:
+    // Attributes
+    std::unordered_set<TERM_MAP_DATA_TYPE, TermMapDataHash> data;
 
-        TermMap();
-        TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors);
+    // Constructors
+    TermMap();
+    TermMap(const std::vector<Sigma> &sums, const std::vector<Tensor> &tensors);
 };
 
 struct TermMapHash {
@@ -63,99 +70,112 @@ struct TermMapHash {
     }
 };
 
-bool operator==(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b);
-bool operator!=(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b);
+bool operator==(const TERM_MAP_SUB_DATA_TYPE &a, const TERM_MAP_SUB_DATA_TYPE &b);
+bool operator!=(const TERM_MAP_SUB_DATA_TYPE &a, const TERM_MAP_SUB_DATA_TYPE &b);
 
-bool operator==(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b);
-bool operator!=(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b);
+bool operator==(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b);
+bool operator!=(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b);
 
-bool operator==(TermMap &a, TermMap &b);
-bool operator!=(TermMap &a, TermMap &b);
+bool operator==(const TermMap &a, const TermMap &b);
+bool operator!=(const TermMap &a, const TermMap &b);
 
-std::unordered_map<std::string, std::string> default_index_key();
+extern const std::unordered_map<std::string, std::string> default_index_key;
 
-int get_case(Delta dd, std::unordered_set<Idx, IdxHash> ilist);
-void _resolve(
-        std::vector<Sigma> &sums,
-        std::vector<Tensor> &tensors,
-        std::vector<Operator> &operators,
-        std::vector<Delta> &deltas);
+int get_case(const Delta &dd, const std::unordered_set<Idx, IdxHash> &ilist);
 
+void _resolve(std::vector<Sigma> &sums,
+              std::vector<Tensor> &tensors,
+              std::vector<Operator> &operators,
+              std::vector<Delta> &deltas);
+
+
+// Term
 
 class Term {
-    public:
-        double scalar;  // TODO store as fraction
-        std::vector<Sigma> sums;
-        std::vector<Tensor> tensors;
-        std::vector<Operator> operators;
-        std::vector<Delta> deltas;
-        std::unordered_map<std::string, std::string> index_key;
+ public:
+    // Attributes
+    double scalar;
+    std::vector<Sigma> sums;
+    std::vector<Tensor> tensors;
+    std::vector<Operator> operators;
+    std::vector<Delta> deltas;
+    std::unordered_map<std::string, std::string> index_key;
 
-        Term();
-        Term(
-                double _scalar,
-                std::vector<Sigma> _sums,
-                std::vector<Tensor> _tensors,
-                std::vector<Operator> _operators,
-                std::vector<Delta> _deltas,
-                std::unordered_map<std::string, std::string> _index_key=default_index_key()
-        );
+    // Constructors
+    Term();
+    Term(const double scalar,
+         const std::vector<Sigma> &sums,
+         const std::vector<Tensor> &tensors,
+         const std::vector<Operator> &operators,
+         const std::vector<Delta> &deltas,
+         const std::unordered_map<std::string, std::string> index_key=default_index_key);
 
-        void resolve();
-        std::string repr();
-        std::string _print_str(bool with_scalar=true);
-        std::unordered_map<Idx, std::string, IdxHash> _idx_map();
-        std::vector<Idx> ilist();
-        Term _inc(int i);
-        Term copy();
+    // Functions
+    void resolve();
+    std::unordered_map<Idx, std::string, IdxHash> _idx_map() const;
+    std::vector<Idx> ilist() const;
+    Term _inc(int i) const;
+    Term copy() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str(const bool with_scalar = true) const;
 };
 
-Term operator*(Term &a, Term &b);
-Term operator*(Term &a, double &b);
-Term operator*(double &a, Term &b);
-Term operator*(Term &a, int &b);
-Term operator*(int &a, Term &b);
+Term operator*(const Term &a, const Term &b);
+Term operator*(const Term &a, const double &b);
+Term operator*(const double &a, const Term &b);
+Term operator*(const Term &a, const int &b);
+Term operator*(const int &a, const Term &b);
 bool operator==(const Term &a, const Term &b);
 bool operator!=(const Term &a, const Term &b);
 
+
+// ATerm
+
 class ATerm {
-    public:
-        double scalar;  // TODO store as fraction
-        std::vector<Sigma> sums;
-        std::vector<Tensor> tensors;
-        std::unordered_map<std::string, std::string> index_key;
+ public:
+    // Attributes
+    double scalar;
+    std::vector<Sigma> sums;
+    std::vector<Tensor> tensors;
+    std::unordered_map<std::string, std::string> index_key;
 
-        ATerm();
-        ATerm(
-                double _scalar,
-                std::vector<Sigma> _sums,
-                std::vector<Tensor> _tensors,
-                std::unordered_map<std::string, std::string> _index_key=default_index_key()
-        );
-        ATerm(Term term);
+    // Constructors
+    ATerm();
+    ATerm(
+            const double _scalar,
+            const std::vector<Sigma> &_sums,
+            const std::vector<Tensor> &_tensors,
+            const std::unordered_map<std::string, std::string> _index_key=default_index_key
+    );
+    explicit ATerm(const Term &term);
 
-        ATerm _inc(int i);
-        std::string repr();
-        std::string _print_str(bool with_scalar=true);
-        std::unordered_map<Idx, std::string, IdxHash> _idx_map();
-        std::string _einsum_str();
-        bool match(ATerm other);
-        int pmatch(ATerm other);
-        std::vector<Idx> ilist();
-        unsigned int nidx();
-        void sort_tensors();
-        void merge_external();
-        bool connected();
-        bool reducible();
-        void transpose(std::vector<int> perm);
-        ATerm copy();
+    // Functions
+    ATerm _inc(const int i) const;
+    std::unordered_map<Idx, std::string, IdxHash> _idx_map() const;
+    bool match(const ATerm other) const;
+    int pmatch(const ATerm other) const;
+    std::vector<Idx> ilist() const;
+    unsigned int nidx() const;
+    void sort_tensors();
+    void merge_external();
+    bool connected() const;
+    bool reducible() const;
+    void transpose(const std::vector<int> &perm);
+    ATerm copy() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str(const bool with_scalar = true) const;
+    std::string _einsum_str() const;
 };
 
-ATerm operator*(ATerm &a, ATerm &b);
-ATerm operator*(ATerm &a, double &b);
-ATerm operator*(double &a, ATerm &b);
-ATerm operator*(ATerm &a, int &b);
-ATerm operator*(int &a, ATerm &b);
+ATerm operator*(const ATerm &a, const ATerm &b);
+ATerm operator*(const ATerm &a, const double &b);
+ATerm operator*(const double &a, const ATerm &b);
+ATerm operator*(const ATerm &a, const int &b);
+ATerm operator*(const int &a, const ATerm &b);
 bool operator==(const ATerm &a, const ATerm &b);
 bool operator!=(const ATerm &a, const ATerm &b);
 bool operator<(const ATerm &a, const ATerm &b);
@@ -164,50 +184,64 @@ bool operator>(const ATerm &a, const ATerm &b);
 bool operator>=(const ATerm &a, const ATerm &b);
 
 
+// Expression
+
 class Expression {
-    public:
-        std::vector<Term> terms;
-        const double tthresh = 1e-15;
+ public:
+    // Attributes
+    std::vector<Term> terms;
+    const double tthresh = 1e-15;
 
-        Expression();
-        Expression(std::vector<Term> _terms);
+    // Constructors
+    Expression();
+    explicit Expression(const std::vector<Term> &terms);
 
-        void resolve();
-        std::string repr();
-        std::string _print_str();
-        bool are_operators();
+    // Functions
+    void resolve();
+    bool are_operators() const;
+
+    // String representations
+    std::string repr() const;
+    std::string _print_str() const;
 };
 
 Expression operator+(const Expression &a, const Expression &b);
-Expression operator-(Expression &a, Expression &b);
-Expression operator*(Expression &a, Expression &b);
-Expression operator*(Expression &a, double &b);
-Expression operator*(double &a, Expression &b);
-Expression operator*(Expression &a, int &b);
-Expression operator*(int &a, Expression &b);
+Expression operator-(const Expression &a, const Expression &b);
+Expression operator*(const Expression &a, const Expression &b);
+Expression operator*(const Expression &a, const double &b);
+Expression operator*(const double &a, const Expression &b);
+Expression operator*(const Expression &a, const int &b);
+Expression operator*(const int &a, const Expression &b);
 bool operator==(const Expression &a, const Expression &b);
 bool operator!=(const Expression &a, const Expression &b);
 
 
+// AExpression
+
 class AExpression {
-    public:
-        std::vector<ATerm> terms;
-        const double tthresh = 1e-15;
+ public:
+    // Attributes
+    std::vector<ATerm> terms;
+    const double tthresh = 1e-15;
 
-        AExpression();
-        AExpression(std::vector<ATerm> _terms, bool _simplify=true, bool _sort=true);
-        AExpression(Expression ex, bool _simplify=true, bool _sort=true);
+    // Constructors
+    AExpression();
+    AExpression(const std::vector<ATerm> &terms, const bool simplify = true, const bool sort = true);
+    AExpression(const Expression &ex, const bool simplify = true, const bool sort = true);
 
-        void simplify();
-        void sort();
-        void sort_tensors();
-        std::string _print_str();
-        std::string _print_einsum(std::string lhs="");
-        bool connected();
-        AExpression get_connected(bool _simplify, bool _sort);
-        bool pmatch(AExpression other);
-        void transpose(std::vector<int> perm);
+    // Functions
+    void simplify();
+    void sort();
+    void sort_tensors();
+    bool connected() const;
+    AExpression get_connected(const bool _simplify = true, const bool _sort = true) const;
+    bool pmatch(const AExpression &other) const;
+    void transpose(const std::vector<int> &perm);
+
+    // String representations
+    std::string _print_str() const;
+    std::string _print_einsum(const std::string lhs="") const;
 };
 
 
-#endif
+#endif  // CWICK_SRC_EXPRESSION_H_

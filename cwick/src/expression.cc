@@ -8,77 +8,61 @@
 #include "expression.h"
 
 #include <math.h>
-#include<iostream>
 
-#define swap(x, y) { auto temp = x; x = y; y = temp; }
-
-/*
- *  Wick implements TermMaps as sets of complex nested data structures
- *  which are pretty horrible to implement in C++. Instead, TermMap can
- *  be a vector which can be sorted in O(N log N) and then equality can
- *  be checked in O(N) worst-case. TermMap instances don't have very
- *  long lengths in any practical example so this might be fine.
- *
- *  TermMap is only used to compare equality between two instances.
- */
 
 TermMap::TermMap() {}
 
-TermMap::TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors) {
-    std::vector<Idx> sindices;
+TermMap::TermMap(const std::vector<Sigma> &sums, const std::vector<Tensor> &tensors) {
+    std::vector<Idx> sindices(sums.size());
     for (unsigned int i = 0; i < sums.size(); i++) {
-        sindices.push_back(sums[i].idx);
+        sindices[i] = sums[i].idx;
     }
 
-    for (unsigned int _ti = 0; _ti < tensors.size(); _ti++) {
-        Tensor ti = tensors[_ti];  // TODO make reference
-        std::vector<Idx> ilist = ti.ilist();
-        std::string tiname = (ti.name == "") ? "!" : ti.name;
+    for (auto ti = tensors.begin(); ti < tensors.end(); ti++) {
+        std::vector<Idx> ilist = (*ti).ilist();
+        std::string tiname = ((*ti).name == "") ? "!" : (*ti).name;
 
         // can't be arsed with a dict, use two vectors instead FIXME
         // TODO place these keys in a sorted fashion
         std::vector<std::string> strs_keys;
         std::vector<std::unordered_set<std::string>> strs_vals;
-        for (unsigned int x = 0; x < ilist.size(); x++) {
+        for (auto x = ilist.begin(); x < ilist.end(); x++) {
             bool found = false;
-            for (unsigned int y = 0; y < strs_keys.size(); y++) {
-                if (strs_keys[y] == ilist[x].space) {
+            for (auto y = strs_keys.begin(); y < strs_keys.end(); y++) {
+                if ((*y) == (*x).space) {
                     found = true;
                     break;
                 }
             }
             if (!(found)) {
-                strs_keys.push_back(ilist[x].space);
+                strs_keys.push_back((*x).space);
                 strs_vals.push_back(std::unordered_set<std::string>());
             }
         }
 
-        for (unsigned int i = 0; i < ti.indices.size(); i++) {
-            Idx iidx = ti.indices[i];  // TODO make reference
-            std::string space = iidx.space;
+        for (unsigned int i = 0; i < (*ti).indices.size(); i++) {
+            const Idx *iidx = &((*ti).indices[i]);
+            std::string space = (*iidx).space;
             std::string istr = std::to_string(i);
 
             bool summed = false;
-            for (unsigned int x = 0; x < sindices.size(); x++) {
-                if (sindices[x] == iidx) {
+            for (auto s = sindices.begin(); s < sindices.end(); s++) {
+                if ((*s) == (*iidx)) {
                     summed = true;
                     break;
                 }
             }
 
-            for (unsigned int _tj = 0; _tj < tensors.size(); _tj++) {
-                Tensor tj = tensors[_tj];  // TODO make reference
-                std::string tjname = (tj.name == "") ? "!" : tj.name;
+            for (auto tj = tensors.begin(); tj < tensors.end(); tj++) {
+                std::string tjname = ((*tj).name == "") ? "!" : (*tj).name;
 
                 // jts
                 std::unordered_set<std::pair<std::string, Idx>, IdxStringPairHash> jts;
-                for (unsigned int j = 0; j < tj.indices.size(); j++) {
-                    Idx jidx = tj.indices[j];  // TODO make reference
+                for (unsigned int j = 0; j < (*tj).indices.size(); j++) {
+                    const Idx *jidx = &((*tj).indices[j]);
 
-                    if (iidx == jidx) {
-                        std::pair<std::string, Idx> p;
-                        p.first = std::to_string(j);
-                        p.second = jidx;
+                    if ((*iidx) == (*jidx)) {
+                        std::pair<std::string, Idx> p(std::to_string(j), *jidx);
                         jts.insert(p);
                     }
                 }
@@ -100,7 +84,7 @@ TermMap::TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors) {
                         // make_str
                         std::string x_str = istr + tjname + (*itr).first;
                         if (summed) {
-                            x_str = x_str + "x";
+                            x_str += "x";
                         }
                         strs_vals[strs_idx].insert(x_str);
                     }
@@ -110,18 +94,9 @@ TermMap::TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors) {
 
         // lll: sort strs by the keys
         // strs: strs_keys (vector of str) : strs_vals (vector of set<str>)
-        // sort them in-place with a brute-force algo for now:  FIXME
-        // replace with https://stackoverflow.com/questions/17074324
-        {
-            for (unsigned int x = 0; x < strs_keys.size(); x++) {
-                for (unsigned int y = 0; y < (strs_keys.size()-x-1); y++) {
-                    if (strs_keys[y] > strs_keys[y+1]) {
-                        swap(strs_keys[y], strs_keys[y+1]);
-                        swap(strs_vals[y], strs_vals[y+1]);
-                    }
-                }
-            }
-        }
+        auto mask = argsort(strs_keys);
+        strs_keys = apply_argsort(strs_keys, mask);
+        strs_vals = apply_argsort(strs_vals, mask);
 
         // make element of TermMap.data
         std::unordered_set<TERM_MAP_SUB_DATA_TYPE, TermMapSubDataHash> subdatas;
@@ -135,14 +110,12 @@ TermMap::TermMap(std::vector<Sigma> sums, std::vector<Tensor> tensors) {
     }
 }
 
-bool operator==(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b) {
+bool operator==(const TERM_MAP_SUB_DATA_TYPE &a, const TERM_MAP_SUB_DATA_TYPE &b) {
     if (a.first != b.first) {
         return false;
-    }
-    else if (a.second.size() != b.second.size()) {
+    } else if (a.second.size() != b.second.size()) {
         return false;
-    }
-    else {
+    } else {
         for (auto ai = a.second.begin(); ai != a.second.end(); ai++) {
             if (b.second.find(*ai) == b.second.end()) {
                 return false;
@@ -153,59 +126,54 @@ bool operator==(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b) {
     return true;
 }
 
-bool operator!=(TERM_MAP_SUB_DATA_TYPE &a, TERM_MAP_SUB_DATA_TYPE &b) {
+bool operator!=(const TERM_MAP_SUB_DATA_TYPE &a, const TERM_MAP_SUB_DATA_TYPE &b) {
     return (!(a == b));
 }
 
-bool operator==(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b) {
+bool operator==(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b) {
     if (a.first != b.first) {
         return false;
-    }
-    else if (a.second.size() != b.second.size()) {
+    } else if (a.second.size() != b.second.size()) {
         return false;
-    }
-    else {
+    } else {
         for (auto ai = a.second.begin(); ai != a.second.end(); ai++) {
             if (b.second.find(*ai) == b.second.end()) {
                 return false;
             }
         }
+        return true;
     }
-
-    return true;
 }
 
-bool operator!=(TERM_MAP_DATA_TYPE &a, TERM_MAP_DATA_TYPE &b) {
+bool operator!=(const TERM_MAP_DATA_TYPE &a, const TERM_MAP_DATA_TYPE &b) {
     return (!(a == b));
 }
 
-bool operator==(TermMap &a, TermMap &b) {
+bool operator==(const TermMap &a, const TermMap &b) {
     if (a.data.size() != b.data.size()) {
         return false;
-    }
-    else {
+    } else {
         for (auto ai = a.data.begin(); ai != a.data.end(); ai++) {
             if (b.data.find(*ai) == b.data.end()) {
                 return false;
             }
         }
+        return true;
     }
-
-    return true;
 }
 
-bool operator!=(TermMap &a, TermMap &b) {
+bool operator!=(const TermMap &a, const TermMap &b) {
     return (!(a == b));
 }
 
 
-int get_case(Delta dd, std::unordered_set<Idx, IdxHash> ilist) {
+int get_case(const Delta &dd, const std::unordered_set<Idx, IdxHash> &ilist) {
     assert(dd.i1.space == dd.i2.space);
 
-    std::unordered_set<Idx, IdxHash>::iterator it1 = ilist.find(dd.i1);
+    std::unordered_set<Idx, IdxHash>::const_iterator it1 = ilist.find(dd.i1);
     bool is1 = (it1 != ilist.end());
 
-    std::unordered_set<Idx, IdxHash>::iterator it2 = ilist.find(dd.i2);
+    std::unordered_set<Idx, IdxHash>::const_iterator it2 = ilist.find(dd.i2);
     bool is2 = (it2 != ilist.end());
 
     int _case = 0;
@@ -219,25 +187,23 @@ int get_case(Delta dd, std::unordered_set<Idx, IdxHash> ilist) {
     return _case;
 }
 
-void _resolve(
-        std::vector<Sigma> &sums,
-        std::vector<Tensor> &tensors,
-        std::vector<Operator> &operators,
-        std::vector<Delta> &deltas)
-{
-    std::vector<Sigma> newsums;
-    std::vector<Tensor> newtensors;
-    std::vector<Operator> newoperators;
+void _resolve(std::vector<Sigma> &sums,
+              std::vector<Tensor> &tensors,
+              std::vector<Operator> &operators,
+              std::vector<Delta> &deltas) {
+    std::vector<Sigma> newsums(sums.size());
+    std::vector<Tensor> newtensors(tensors.size());
+    std::vector<Operator> newoperators(operators.size());
     std::vector<Delta> newdeltas;
 
     for (unsigned int i = 0; i < sums.size(); i++) {
-        newsums.push_back(sums[i].copy());
+        newsums[i] = sums[i].copy();
     }
     for (unsigned int i = 0; i < tensors.size(); i++) {
-        newtensors.push_back(tensors[i].copy());
+        newtensors[i] = tensors[i].copy();
     }
     for (unsigned int i = 0; i < operators.size(); i++) {
-        newoperators.push_back(operators[i].copy());
+        newoperators[i] = operators[i].copy();
     }
 
     for (unsigned int i = 0; i < deltas.size(); i++) {
@@ -258,10 +224,9 @@ void _resolve(
         ilist.insert(sums[i].idx);
     }
 
-    // TODO just inline this
-    std::vector<int> cases;
+    std::vector<int> cases(newdeltas.size());
     for (unsigned int d = 0; d < newdeltas.size(); d++) {
-        cases.push_back(get_case(newdeltas[d], ilist));
+        cases[d] = get_case(newdeltas[d], ilist);
     }
 
     std::vector<Delta> rs;
@@ -270,8 +235,8 @@ void _resolve(
     std::vector<int> cases1(cases);
     for (unsigned int d = 0; d < newdeltas.size(); d++) {
         int _case = cases1[d];
-        Idx i1 = newdeltas[d].i1;
-        Idx i2 = newdeltas[d].i2;
+        const Idx i1 = newdeltas[d].i1;
+        const Idx i2 = newdeltas[d].i2;
 
         if (_case == 3) {
             continue;
@@ -287,8 +252,7 @@ void _resolve(
                 }
             }
             assert(found);
-        }
-        else if (_case == 2) {
+        } else if (_case == 2) {
             Sigma sigma_i2(i2);
             bool found = false;
             for (unsigned int x = 0; x < newsums.size(); x++) {
@@ -299,8 +263,7 @@ void _resolve(
                 }
             }
             assert(found);
-        }
-        else {
+        } else {
             assert(_case == 0);
         }
 
@@ -308,81 +271,68 @@ void _resolve(
         std::vector<int> cases2(cases);
         for (unsigned int i = 0; i < newdeltas.size(); i++) {
             int ccc = cases2[i];
-            Delta ddd = newdeltas[i];  // store ddd as a copy
 
-            if ((_case == 1) && (ddd.i1 == i1)) {
+            if ((_case == 1) && (newdeltas[i].i1 == i1)) {
                 newdeltas[i].i1 = i2;
                 if (ccc == 3) {
                     cases[i] = 2;
-                }
-                else if (ccc == 1) {
+                } else if (ccc == 1) {
                     cases[i] = 0;
+                } else {
+                    throw std::runtime_error("Invalid case in _resolve [1]");
                 }
-                else {
-                    assert(0);
-                }
-            }
-            else if ((_case == 1) && (ddd.i2 == i1)) {
+            } else if ((_case == 1) && (newdeltas[i].i2 == i1)) {
                 newdeltas[i].i2 = i2;
                 if (ccc == 3) {
                     cases[i] = 1;
-                }
-                else if (ccc == 2) {
+                } else if (ccc == 2) {
                     cases[i] = 0;
+                } else {
+                    throw std::runtime_error("Invalid case in _resolve [2]");
                 }
-                else {
-                    assert(0);
-                }
-            }
-            else if ((_case == 2) && (ddd.i2 == i2)) {
+            } else if ((_case == 2) && (newdeltas[i].i2 == i2)) {
                 newdeltas[i].i2 = i1;
                 if (ccc == 3) {
                     cases[i] = 1;
-                }
-                else if (ccc == 2) {
+                } else if (ccc == 2) {
                     cases[i] = 0;
+                } else {
+                    throw std::runtime_error("Invalid case in _resolve [3]");
                 }
-                else {
-                    assert(0);
-                }
-            } else if ((_case == 2) && (ddd.i1 == i2)) {
+            } else if ((_case == 2) && (newdeltas[i].i1 == i2)) {
                 newdeltas[i].i1 = i1;
                 if (ccc == 3) {
                     cases[i] = 2;
-                }
-                else if (ccc == 1) {
+                } else if (ccc == 1) {
                     cases[i] = 0;
-                }
-                else {
-                    assert(0);
+                } else {
+                    throw std::runtime_error("Invalid case in _resolve [4]");
                 }
             }
         }
 
-        for (unsigned int t = 0; t < newtensors.size(); t++) {
-            for (unsigned int k = 0; k < newtensors[t].indices.size(); k++) {
+        for (auto t = newtensors.begin(); t < newtensors.end(); t++) {
+            for (auto k = (*t).indices.begin(); k < (*t).indices.end(); k++) {
                 if (_case == 1) {
-                    if (newtensors[t].indices[k] == i1) {
-                        newtensors[t].indices[k] = i2;
+                    if ((*k) == i1) {
+                        (*k) = i2;
                     }
-                }
-                else if (_case == 2) {
-                    if (newtensors[t].indices[k] == i2) {
-                        newtensors[t].indices[k] = i1;
+                } else if (_case == 2) {
+                    if ((*k) == i2) {
+                        (*k) = i1;
                     }
                 }
             }
         }
 
-        for (unsigned int o = 0; o < newoperators.size(); o++) {
+        for (auto o = newoperators.begin(); o < newoperators.end(); o++) {
             if (_case == 1) {
-                if (newoperators[o].idx == i1) {
-                    newoperators[o].idx = i2;
+                if ((*o).idx == i1) {
+                    (*o).idx = i2;
                 }
-            }
-            else if (_case == 2) {
-                if (newoperators[o].idx == i2) {
-                    newoperators[o].idx = i1;
+            } else if (_case == 2) {
+                if ((*o).idx == i2) {
+                    (*o).idx = i1;
                 }
             }
         }
@@ -421,8 +371,8 @@ void _resolve(
     assert(newdeltas.size() == cases.size());
     for (unsigned int d = 0; d < newdeltas.size(); d++) {
         int _case = cases[d];
-        Idx i1 = newdeltas[d].i1;
-        Idx i2 = newdeltas[d].i2;
+        const Idx i1 = newdeltas[d].i1;
+        const Idx i2 = newdeltas[d].i2;
 
         if (_case == 3) {
             Sigma sigma_i2(i2);
@@ -438,24 +388,24 @@ void _resolve(
         } else if (_case < 3) {
             assert(_case == 0);
         } else {
-            assert(0);
+            throw std::runtime_error("Invalid case in _resolve [5]");
         }
 
         if (_case == 0) {
             continue;
         }
 
-        for (unsigned int t = 0; t < newtensors.size(); t++) {
-            for (unsigned int k = 0; k < newtensors[t].indices.size(); k++) {
-                if (newtensors[t].indices[k] == i2) {
-                    newtensors[t].indices[k] = i1;
+        for (auto t = newtensors.begin(); t < newtensors.end(); t++) {
+            for (auto k = (*t).indices.begin(); k < (*t).indices.end(); k++) {
+                if ((*k) == i2) {
+                    (*k) = i1;
                 }
             }
         }
 
-        for (unsigned int o = 0; o < newoperators.size(); o++) {
-            if (newoperators[o].idx == i2) {
-                newoperators[o].idx = i1;
+        for (auto o = newoperators.begin(); o < newoperators.end(); o++) {
+            if ((*o).idx == i2) {
+                (*o).idx = i1;
             }
         }
 
@@ -484,15 +434,10 @@ void _resolve(
     return;
 }
 
-
-// TODO make this into a static quantity
-std::unordered_map<std::string, std::string> default_index_key() {
-    std::unordered_map<std::string, std::string> out = {
-        {"occ", "ijklmnop"},
-        {"vir", "abcdefgh"},
-        {"nm", "IJKLMNOP"},
-    };
-    return out;
+const std::unordered_map<std::string, std::string> default_index_key = {
+    {"occ", "ijklmnop"},
+    {"vir", "abcdefgh"},
+    {"nm", "IJKLMNOP"},
 };
 
 Term::Term() {
@@ -500,13 +445,12 @@ Term::Term() {
 }
 
 Term::Term(
-        double _scalar,
-        std::vector<Sigma> _sums,
-        std::vector<Tensor> _tensors,
-        std::vector<Operator> _operators,
-        std::vector<Delta> _deltas,
-        std::unordered_map<std::string, std::string> _index_key)
-{
+        const double _scalar,
+        const std::vector<Sigma> &_sums,
+        const std::vector<Tensor> &_tensors,
+        const std::vector<Operator> &_operators,
+        const std::vector<Delta> &_deltas,
+        const std::unordered_map<std::string, std::string> _index_key) {
     scalar = _scalar;
     sums = _sums;
     tensors = _tensors;
@@ -515,31 +459,30 @@ Term::Term(
     index_key = _index_key;
 }
 
-// TODO should Term.resolve return another Term or change in-place?
 void Term::resolve() {
     _resolve(sums, tensors, operators, deltas);
 }
 
-std::string Term::repr() {
+std::string Term::repr() const {
     std::string out = format_float(scalar, false);
 
     for (unsigned int i = 0; i < sums.size(); i++) {
-        out = out + sums[i].repr();
+        out += sums[i].repr();
     }
     for (unsigned int i = 0; i < deltas.size(); i++) {
-        out = out + deltas[i].repr();
+        out += deltas[i].repr();
     }
     for (unsigned int i = 0; i < tensors.size(); i++) {
-        out = out + tensors[i].repr();
+        out += tensors[i].repr();
     }
     for (unsigned int i = 0; i < operators.size(); i++) {
-        out = out + operators[i].repr();
+        out += operators[i].repr();
     }
 
     return out;
 }
 
-std::string Term::_print_str(bool with_scalar) {
+std::string Term::_print_str(const bool with_scalar) const {
     auto imap = _idx_map();
 
     std::string out = "";
@@ -563,7 +506,7 @@ std::string Term::_print_str(bool with_scalar) {
     return out;
 }
 
-std::unordered_map<Idx, std::string, IdxHash> Term::_idx_map() {
+std::unordered_map<Idx, std::string, IdxHash> Term::_idx_map() const {
     auto _ilist = ilist();
 
     std::unordered_map<std::string, int> off;
@@ -574,19 +517,18 @@ std::unordered_map<Idx, std::string, IdxHash> Term::_idx_map() {
         if (off.find((*idx).space) != off.end()) {
             o = off[(*idx).space];
             off[(*idx).space] += 1;
-        }
-        else {
+        } else {
             o = 0;
             off[(*idx).space] = 1;
         }
 
-        imap[*idx] = index_key[(*idx).space][o];
+        imap[*idx] = index_key.at((*idx).space)[o];
     }
 
     return imap;
 }
 
-std::vector<Idx> Term::ilist() {
+std::vector<Idx> Term::ilist() const {
     std::unordered_set<Idx, IdxHash> sout;
     std::vector<Idx> out;
 
@@ -616,23 +558,23 @@ std::vector<Idx> Term::ilist() {
     return out;
 }
 
-Term Term::_inc(int i) {
-    std::vector<Sigma> newsums;
-    std::vector<Tensor> newtensors;
-    std::vector<Operator> newoperators;
-    std::vector<Delta> newdeltas;
+Term Term::_inc(const int i) const {
+    std::vector<Sigma> newsums(sums.size());
+    std::vector<Tensor> newtensors(tensors.size());
+    std::vector<Operator> newoperators(operators.size());
+    std::vector<Delta> newdeltas(deltas.size());
 
     for (unsigned int j = 0; j < sums.size(); j++) {
-        newsums.push_back(sums[j]._inc(i));
+        newsums[j] = sums[j]._inc(i);
     }
     for (unsigned int j = 0; j < tensors.size(); j++) {
-        newtensors.push_back(tensors[j]._inc(i));
+        newtensors[j] = tensors[j]._inc(i);
     }
     for (unsigned int j = 0; j < operators.size(); j++) {
-        newoperators.push_back(operators[j]._inc(i));
+        newoperators[j] = operators[j]._inc(i);
     }
     for (unsigned int j = 0; j < deltas.size(); j++) {
-        newdeltas.push_back(deltas[j]._inc(i));
+        newdeltas[j] = deltas[j]._inc(i);
     }
 
     Term out(scalar, newsums, newtensors, newoperators, newdeltas, index_key);
@@ -640,24 +582,24 @@ Term Term::_inc(int i) {
     return out;
 }
 
-Term Term::copy() {
+Term Term::copy() const {
     double newscalar = scalar;
-    std::vector<Sigma> newsums;
-    std::vector<Tensor> newtensors;
-    std::vector<Operator> newoperators;
-    std::vector<Delta> newdeltas;
+    std::vector<Sigma> newsums(sums.size());
+    std::vector<Tensor> newtensors(tensors.size());
+    std::vector<Operator> newoperators(operators.size());
+    std::vector<Delta> newdeltas(deltas.size());
 
     for (unsigned int i = 0; i < sums.size(); i++) {
-        newsums.push_back(sums[i].copy());
+        newsums[i] = sums[i].copy();
     }
     for (unsigned int i = 0; i < tensors.size(); i++) {
-        newtensors.push_back(tensors[i].copy());
+        newtensors[i] = tensors[i].copy();
     }
     for (unsigned int i = 0; i < operators.size(); i++) {
-        newoperators.push_back(operators[i].copy());
+        newoperators[i] = operators[i].copy();
     }
     for (unsigned int i = 0; i < deltas.size(); i++) {
-        newdeltas.push_back(deltas[i].copy());
+        newdeltas[i] = deltas[i].copy();
     }
 
     Term out(newscalar, newsums, newtensors, newoperators, newdeltas, index_key);
@@ -665,9 +607,9 @@ Term Term::copy() {
     return out;
 }
 
-Term operator*(Term &a, Term &b) {
-    std::vector<Idx> il1 = a.ilist();
-    std::vector<Idx> il2 = b.ilist();
+Term operator*(const Term &a, const Term &b) {
+    const std::vector<Idx> il1 = a.ilist();
+    const std::vector<Idx> il2 = b.ilist();
     std::unordered_set<Idx, IdxHash> sil1, sil2, sil12_intersection;
 
     for (unsigned int i = 0; i < il1.size(); i++) {
@@ -676,11 +618,9 @@ Term operator*(Term &a, Term &b) {
     for (unsigned int i = 0; i < il2.size(); i++) {
         sil2.insert(il2[i]);
     }
-    for (
-        std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-        itr != sil1.end();
-        itr++)
-    {
+    for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
+         itr != sil1.end();
+         itr++) {
         if (sil2.find(*itr) != sil2.end()) {
             sil12_intersection.insert(*itr);
         }
@@ -689,17 +629,15 @@ Term operator*(Term &a, Term &b) {
     Term newb;
     if (sil12_intersection.size() != 0) {
         int m = -1;
-        for (
-            std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-            itr != sil1.end();
-            itr++)
-        {
+        for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
+             itr != sil1.end();
+             itr++) {
             m = ((*itr).index > m) ? (*itr).index : m;
         }
         assert(m != -1);
         newb = b._inc(m + 1);
     } else {
-        newb = b;  // TODO reference
+        newb = b;
     }
 
     double newscalar = a.scalar * newb.scalar;
@@ -716,7 +654,7 @@ Term operator*(Term &a, Term &b) {
 
     std::unordered_map<std::string, std::string> new_index_key;
 
-    if (a.index_key == default_index_key()) {
+    if (a.index_key == default_index_key) {
         new_index_key = b.index_key;
     } else {
         new_index_key = a.index_key;
@@ -727,27 +665,26 @@ Term operator*(Term &a, Term &b) {
     return newterm;
 }
 
-Term operator*(Term &a, double &b) {
+Term operator*(const Term &a, const double &b) {
     Term newterm = a.copy();
     newterm.scalar *= b;
     return newterm;
 }
 
-Term operator*(double &a, Term &b) {
+Term operator*(const double &a, const Term &b) {
     return (b * a);
 }
 
-Term operator*(Term &a, int &b) {
+Term operator*(const Term &a, const int &b) {
     Term newterm = a.copy();
     newterm.scalar = newterm.scalar * b;
     return newterm;
 }
 
-Term operator*(int &a, Term &b) {
+Term operator*(const int &a, const Term &b) {
     return (b * a);
 }
 
-// FIXME single breakpoint
 // FIXME these comparisons probably need to be cast to set for O(1)
 bool operator==(const Term &a, const Term &b) {
     if (a.scalar != b.scalar) {
@@ -778,25 +715,27 @@ bool operator!=(const Term &a, const Term &b) {
     return (!(a == b));
 }
 
-ATerm::ATerm() {};
+ATerm::ATerm() {}
 
 ATerm::ATerm(
-            double _scalar,
-            std::vector<Sigma> _sums,
-            std::vector<Tensor> _tensors,
-            std::unordered_map<std::string, std::string> _index_key)
-{
+            const double _scalar,
+            const std::vector<Sigma> &_sums,
+            const std::vector<Tensor> &_tensors,
+            const std::unordered_map<std::string, std::string> _index_key) {
     scalar = _scalar;
     sums = _sums;
     tensors = _tensors;
     index_key = _index_key;
 }
 
-ATerm::ATerm(Term term) {
+ATerm::ATerm(const Term &term) {
     scalar = term.scalar;
     index_key = term.index_key;
 
     assert(term.operators.size() == 0);
+
+    sums.reserve(term.sums.size());
+    tensors.reserve(term.tensors.size() + term.deltas.size());
 
     for (unsigned int i = 0; i < term.sums.size(); i++) {
         sums.push_back(term.sums[i].copy());
@@ -809,20 +748,20 @@ ATerm::ATerm(Term term) {
     }
 }
 
-std::string ATerm::repr() {
+std::string ATerm::repr() const {
     std::string out = format_float(scalar, false);
 
     for (unsigned int i = 0; i < sums.size(); i++) {
-        out = out + sums[i].repr();
+        out += sums[i].repr();
     }
     for (unsigned int i = 0; i < tensors.size(); i++) {
-        out = out + tensors[i].repr();
+        out += tensors[i].repr();
     }
 
     return out;
 }
 
-std::string ATerm::_print_str(bool with_scalar) {
+std::string ATerm::_print_str(const bool with_scalar) const {
     auto imap = _idx_map();
 
     std::string out = "";
@@ -832,7 +771,7 @@ std::string ATerm::_print_str(bool with_scalar) {
 
     std::string iis = "";
     for (auto x = sums.begin(); x < sums.end(); x++) {
-        iis += imap[(*x).idx];
+        iis += imap.at((*x).idx);
     }
     if (iis != "") {
         out += "\\sum_{" + iis + "}";
@@ -845,7 +784,7 @@ std::string ATerm::_print_str(bool with_scalar) {
     return out;
 }
 
-std::string ATerm::_einsum_str() {
+std::string ATerm::_einsum_str() const {
     auto imap = _idx_map();
     std::string sstr = format_float(scalar, true);
     std::string fstr = "";
@@ -855,8 +794,7 @@ std::string ATerm::_einsum_str() {
     for (auto tt = tensors.begin(); tt < tensors.end(); tt++) {
         if ((*tt).name == "") {
             fstr += (*tt)._istr(imap);
-        }
-        else {
+        } else {
             tstr += ", " + (*tt).name;
             istr += (*tt)._istr(imap) + ",";
         }
@@ -867,7 +805,7 @@ std::string ATerm::_einsum_str() {
     return sstr + "*einsum('" + istr + "->" + fstr + "'" + tstr + ")";
 }
 
-std::unordered_map<Idx, std::string, IdxHash> ATerm::_idx_map() {
+std::unordered_map<Idx, std::string, IdxHash> ATerm::_idx_map() const {
     auto _ilist = ilist();
 
     std::unordered_map<std::string, int> off;
@@ -876,29 +814,28 @@ std::unordered_map<Idx, std::string, IdxHash> ATerm::_idx_map() {
     int o;
     for (auto idx = _ilist.begin(); idx < _ilist.end(); idx++) {
         if (off.find((*idx).space) != off.end()) {
-            o = off[(*idx).space];
+            o = off.at((*idx).space);
             off[(*idx).space] += 1;
-        }
-        else {
+        } else {
             o = 0;
             off[(*idx).space] = 1;
         }
 
-        imap[*idx] = index_key[(*idx).space][o];
+        imap[*idx] = index_key.at((*idx).space)[o];
     }
 
     return imap;
 }
 
-ATerm ATerm::_inc(int i) {
-    std::vector<Sigma> newsums;
-    std::vector<Tensor> newtensors;
+ATerm ATerm::_inc(const int i) const {
+    std::vector<Sigma> newsums(sums.size());
+    std::vector<Tensor> newtensors(tensors.size());
 
     for (unsigned int j = 0; j < sums.size(); j++) {
-        newsums.push_back(sums[j]._inc(i));
+        newsums[j] = sums[j]._inc(i);
     }
     for (unsigned int j = 0; j < tensors.size(); j++) {
-        newtensors.push_back(tensors[j]._inc(i));
+        newtensors[j] = tensors[j]._inc(i);
     }
 
     ATerm out(scalar, newsums, newtensors, index_key);
@@ -906,14 +843,14 @@ ATerm ATerm::_inc(int i) {
     return out;
 }
 
-bool ATerm::match(ATerm other) {
+bool ATerm::match(const ATerm other) const {
     TermMap TM1(sums, tensors);
     TermMap TM2(other.sums, other.tensors);
     return TM1 == TM2;
 }
 
 // Returns 0 instead of None
-int ATerm::pmatch(ATerm other) {
+int ATerm::pmatch(const ATerm other) const {
     if (sums.size() != other.sums.size()) {
         return 0;
     }
@@ -921,9 +858,9 @@ int ATerm::pmatch(ATerm other) {
         return 0;
     }
 
-    std::vector<std::vector<std::pair<std::vector<int>, int>>> tlists;
+    std::vector<std::vector<std::pair<std::vector<int>, int>>> tlists(other.tensors.size());
     for (unsigned int i = 0; i < other.tensors.size(); i++) {
-        tlists.push_back(other.tensors[i].sym.tlist);
+        tlists[i] = other.tensors[i].sym.tlist;
     }
 
     TermMap TM1(sums, tensors);
@@ -950,9 +887,9 @@ int ATerm::pmatch(ATerm other) {
 
         // permute
         assert(other.tensors.size() == u.size());
-        std::vector<Tensor> newtensors;
+        std::vector<Tensor> newtensors(other.tensors.size());
         for (unsigned int x = 0; x < other.tensors.size(); x++) {
-            newtensors.push_back(permute(other.tensors[x], u[x].first));
+            newtensors[x] = permute(other.tensors[x], u[x].first);
         }
 
         TermMap TM2(other.sums, newtensors);
@@ -966,7 +903,7 @@ int ATerm::pmatch(ATerm other) {
 }
 
 // FIXME scales badly
-std::vector<Idx> ATerm::ilist() {
+std::vector<Idx> ATerm::ilist() const {
     std::vector<Idx> out;
 
     for (unsigned int i = 0; i < tensors.size(); i++) {
@@ -1001,8 +938,8 @@ std::vector<Idx> ATerm::ilist() {
     return out;
 }
 
-unsigned int ATerm::nidx() {
-    std::vector<Idx> idxs = ilist();
+unsigned int ATerm::nidx() const {
+    const std::vector<Idx> idxs = ilist();
     return idxs.size();
 }
 
@@ -1010,7 +947,9 @@ void ATerm::sort_tensors() {
     unsigned int off = 0;
     for (unsigned int i = 0; i < tensors.size(); i++) {
         if (tensors[i].name == "") {
-            swap(tensors[i], tensors[off]);
+            auto temp = tensors[i];
+            tensors[i] = tensors[off];
+            tensors[off] = temp;
             off++;
         }
     }
@@ -1036,9 +975,9 @@ void ATerm::merge_external() {
     }
 
     if (num_ext > 1) {
-        std::vector<Tensor> newtensors;
+        std::vector<Tensor> newtensors(tensors.size() - num_ext);
         for (unsigned int t = num_ext; t < tensors.size(); t++) {
-            newtensors.push_back(tensors[t].copy());
+            newtensors[t-num_ext] = tensors[t].copy();
         }
 
         std::vector<Idx> ext_indices;
@@ -1048,22 +987,16 @@ void ATerm::merge_external() {
             }
         }
 
-        // TODO remove if default value is set
-        std::vector<int> plist;
-        for (unsigned int i = 0; i < ext_indices.size(); i++) {
-            plist.push_back(0);
-        }
-        TensorSym sym({plist}, {0});
-        newtensors.insert(newtensors.begin(), Tensor(ext_indices, "", sym));
+        newtensors.insert(newtensors.begin(), Tensor(ext_indices, ""));
 
         tensors = newtensors;
     }
 }
 
-bool ATerm::connected() {
-    std::vector<Idx> ll;
+bool ATerm::connected() const {
+    std::vector<Idx> ll(sums.size());
     for (unsigned int i = 0; i < sums.size(); i++) {
-        ll.push_back(sums[i].idx);
+        ll[i] = sums[i].idx;
     }
 
     std::vector<Tensor> rtensors;
@@ -1121,7 +1054,7 @@ bool ATerm::connected() {
     return (blue.size() == rtensors.size());
 }
 
-bool ATerm::reducible() {
+bool ATerm::reducible() const {
     if (!(connected())) {
         return true;
     }
@@ -1140,9 +1073,9 @@ bool ATerm::reducible() {
         newterm.sums = newsums;
 
         int m = 0;
-        for (unsigned int t = 0; t < newterm.tensors.size(); t++) {
-            for (unsigned int x = 0; x < newterm.tensors[t].indices.size(); x++) {
-                if (newterm.tensors[t].indices[x] == i1) {
+        for (auto t = newterm.tensors.begin(); t < newterm.tensors.end(); t++) {
+            for (auto x = (*t).indices.begin(); x < (*t).indices.end(); x++) {
+                if ((*x) == i1) {
                     m += 1;
                 }
             }
@@ -1158,20 +1091,20 @@ bool ATerm::reducible() {
     return false;
 }
 
-void ATerm::transpose(std::vector<int> perm) {
+void ATerm::transpose(const std::vector<int> &perm) {
     merge_external();
     tensors[0].transpose(perm);
 }
 
-ATerm ATerm::copy() {
-    std::vector<Tensor> newtensors;
-    std::vector<Sigma> newsums;
+ATerm ATerm::copy() const {
+    std::vector<Tensor> newtensors(tensors.size());
+    std::vector<Sigma> newsums(sums.size());
 
     for (unsigned int i = 0; i < sums.size(); i++) {
-        newsums.push_back(sums[i].copy());
+        newsums[i] = sums[i].copy();
     }
     for (unsigned int i = 0; i < tensors.size(); i++) {
-        newtensors.push_back(tensors[i].copy());
+        newtensors[i] = tensors[i].copy();
     }
 
     ATerm out(scalar, newsums, newtensors, index_key);
@@ -1179,9 +1112,9 @@ ATerm ATerm::copy() {
     return out;
 }
 
-ATerm operator*(ATerm &a, ATerm &b) {
-    std::vector<Idx> il1 = a.ilist();
-    std::vector<Idx> il2 = b.ilist();
+ATerm operator*(const ATerm &a, const ATerm &b) {
+    const std::vector<Idx> il1 = a.ilist();
+    const std::vector<Idx> il2 = b.ilist();
     std::unordered_set<Idx, IdxHash> sil1, sil2, sil12_intersection;
 
     for (unsigned int i = 0; i < il1.size(); i++) {
@@ -1190,11 +1123,9 @@ ATerm operator*(ATerm &a, ATerm &b) {
     for (unsigned int i = 0; i < il2.size(); i++) {
         sil2.insert(il2[i]);
     }
-    for (
-        std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-        itr != sil1.end();
-        itr++)
-    {
+    for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
+         itr != sil1.end();
+         itr++) {
         if (sil2.find(*itr) != sil2.end()) {
             sil12_intersection.insert(*itr);
         }
@@ -1203,17 +1134,15 @@ ATerm operator*(ATerm &a, ATerm &b) {
     ATerm newb;
     if (sil12_intersection.size() != 0) {
         int m = -1;
-        for (
-            std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
-            itr != sil1.end();
-            itr++)
-        {
+        for (std::unordered_set<Idx, IdxHash>::iterator itr = sil1.begin();
+             itr != sil1.end();
+             itr++) {
             m = ((*itr).index > m) ? (*itr).index : m;
         }
         assert(m != -1);
         newb = b._inc(m + 1);
     } else {
-        newb = b;  // TODO reference
+        newb = b;
     }
 
     double newscalar = a.scalar * newb.scalar;
@@ -1226,34 +1155,34 @@ ATerm operator*(ATerm &a, ATerm &b) {
 
     std::unordered_map<std::string, std::string> new_index_key;
 
-    if (a.index_key == default_index_key()) {
+    if (a.index_key == default_index_key) {
         new_index_key = b.index_key;
     } else {
         new_index_key = a.index_key;
     }
 
-    ATerm newterm(newscalar, newsums, newtensors, new_index_key);;
+    ATerm newterm(newscalar, newsums, newtensors, new_index_key);
 
     return newterm;
 }
 
-ATerm operator*(ATerm &a, double &b) {
+ATerm operator*(const ATerm &a, const double &b) {
     ATerm newterm = a.copy();
     newterm.scalar *= b;
     return newterm;
 }
 
-ATerm operator*(double &a, ATerm &b) {
+ATerm operator*(const double &a, const ATerm &b) {
     return (b * a);
 }
 
-ATerm operator*(ATerm &a, int &b) {
+ATerm operator*(const ATerm &a, const int &b) {
     ATerm newterm = a.copy();
     newterm.scalar = newterm.scalar * b;
     return newterm;
 }
 
-ATerm operator*(int &a, ATerm &b) {
+ATerm operator*(const int &a, const ATerm &b) {
     return (b * a);
 }
 
@@ -1321,9 +1250,9 @@ bool operator>=(const ATerm &a, const ATerm &b) {
     return (!(a < b));
 }
 
-Expression::Expression() {};
+Expression::Expression() {}
 
-Expression::Expression(std::vector<Term> _terms) {
+Expression::Expression(const std::vector<Term> &_terms) {
     terms = _terms;
 }
 
@@ -1332,6 +1261,7 @@ void Expression::resolve() {
         terms[i].resolve();
     }
 
+    // TODO for loops like this, allocate the full vector and then resize?
     std::vector<Term> newterms;
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (fabs(terms[i].scalar) > tthresh) {
@@ -1342,20 +1272,20 @@ void Expression::resolve() {
     terms = newterms;
 }
 
-std::string Expression::repr() {
+std::string Expression::repr() const {
     std::string out = "";
-    
+
     for (unsigned int i = 0; i < terms.size(); i++) {
-        out = out + terms[i].repr();
+        out += terms[i].repr();
         if (i != (terms.size()-1)) {
-            out = out + " + ";
+            out += " + ";
         }
     }
 
     return out;
 }
 
-std::string Expression::_print_str() {
+std::string Expression::_print_str() const {
     std::string out = "";
 
     for (auto t = terms.begin(); t < terms.end(); t++) {
@@ -1369,7 +1299,7 @@ std::string Expression::_print_str() {
     return out;
 }
 
-bool Expression::are_operators() {
+bool Expression::are_operators() const {
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (terms[i].operators.size() > 0) {
             return true;
@@ -1380,57 +1310,60 @@ bool Expression::are_operators() {
 }
 
 Expression operator+(const Expression &a, const Expression &b) {
-    std::vector<Term> newterms(a.terms);
+    std::vector<Term> newterms(a.terms.size() + b.terms.size());
+    for (unsigned int i = 0; i < a.terms.size(); i++) {
+        newterms[i] = a.terms[i];
+    }
     for (unsigned int i = 0; i < b.terms.size(); i++) {
-        newterms.push_back(b.terms[i]);
+        newterms[i+a.terms.size()] = b.terms[i];
     }
 
     return Expression(newterms);
 }
 
-Expression operator-(Expression &a, Expression &b) {
+Expression operator-(const Expression &a, const Expression &b) {
     double fac = -1.0;
     Expression mb = b * fac;
     return (a + mb);
 }
 
-Expression operator*(Expression &a, Expression &b) {
-    std::vector<Term> newterms;
+Expression operator*(const Expression &a, const Expression &b) {
+    std::vector<Term> newterms(a.terms.size() * b.terms.size());
 
-    for (unsigned int i = 0; i < a.terms.size(); i++) {
-        for (unsigned int j = 0; j < b.terms.size(); j++) {
-            newterms.push_back(a.terms[i] * b.terms[j]);
+    for (unsigned int i = 0, ij = 0; i < a.terms.size(); i++) {
+        for (unsigned int j = 0; j < b.terms.size(); j++, ij++) {
+            newterms[ij] = a.terms[i] * b.terms[j];
         }
     }
 
     return Expression(newterms);
 }
 
-Expression operator*(Expression &a, double &b) {
-    std::vector<Term> newterms;
+Expression operator*(const Expression &a, const double &b) {
+    std::vector<Term> newterms(a.terms.size());
 
     for (unsigned int i = 0; i < a.terms.size(); i++) {
-        newterms.push_back(a.terms[i] * b);
+        newterms[i] = a.terms[i] * b;
     }
 
     return Expression(newterms);
 }
 
-Expression operator*(double &a, Expression &b) {
+Expression operator*(const double &a, const Expression &b) {
     return (b * a);
 }
 
-Expression operator*(Expression &a, int &b) {
-    std::vector<Term> newterms;
+Expression operator*(const Expression &a, const int &b) {
+    std::vector<Term> newterms(a.terms.size());
 
     for (unsigned int i = 0; i < a.terms.size(); i++) {
-        newterms.push_back(a.terms[i] * b);
+        newterms[i] = a.terms[i] * b;
     }
 
     return Expression(newterms);
 }
 
-Expression operator*(int &a, Expression &b) {
+Expression operator*(const int &a, const Expression &b) {
     return (b * a);
 }
 
@@ -1453,9 +1386,9 @@ bool operator!=(const Expression &a, const Expression &b) {
 }
 
 
-AExpression::AExpression() {};
+AExpression::AExpression() {}
 
-AExpression::AExpression(std::vector<ATerm> _terms, bool _simplify, bool _sort) {
+AExpression::AExpression(const std::vector<ATerm> &_terms, const bool _simplify, const bool _sort) {
     terms = _terms;
 
     if (_simplify) {
@@ -1466,7 +1399,8 @@ AExpression::AExpression(std::vector<ATerm> _terms, bool _simplify, bool _sort) 
     }
 }
 
-AExpression::AExpression(Expression ex, bool _simplify, bool _sort) {
+AExpression::AExpression(const Expression &ex, const bool _simplify, const bool _sort) {
+    terms.reserve(ex.terms.size());
     for (unsigned int i = 0; i < ex.terms.size(); i++) {
         ATerm term(ex.terms[i]);
         terms.push_back(term);
@@ -1481,7 +1415,7 @@ AExpression::AExpression(Expression ex, bool _simplify, bool _sort) {
 }
 
 void AExpression::simplify() {
-    // FIXME unecessary to copy?
+    // TODO prealloc
     std::vector<ATerm> newterms;
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (fabs(terms[i].scalar) > tthresh) {
@@ -1519,7 +1453,7 @@ void AExpression::simplify() {
     terms.clear();
 
     for (unsigned int i = 0; i < newterms.size(); i++) {
-        if (keep[i] and (fabs(newterms[i].scalar) > tthresh)) {
+        if (keep[i] && (fabs(newterms[i].scalar) > tthresh)) {
             terms.push_back(newterms[i]);
         }
     }
@@ -1535,7 +1469,7 @@ void AExpression::sort() {
     std::sort(terms.begin(), terms.end());
 }
 
-std::string AExpression::_print_str() {
+std::string AExpression::_print_str() const {
     std::string out = "";
 
     for (auto t = terms.begin(); t < terms.end(); t++) {
@@ -1549,7 +1483,7 @@ std::string AExpression::_print_str() {
     return out;
 }
 
-std::string AExpression::_print_einsum(std::string lhs) {
+std::string AExpression::_print_einsum(const std::string lhs) const {
     std::string out = "";
 
     for (auto t = terms.begin(); t < terms.end(); t++) {
@@ -1562,7 +1496,7 @@ std::string AExpression::_print_einsum(std::string lhs) {
     return out;
 }
 
-bool AExpression::connected() {
+bool AExpression::connected() const {
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (!(terms[i].connected())) {
             return false;
@@ -1572,7 +1506,8 @@ bool AExpression::connected() {
     return true;
 }
 
-AExpression AExpression::get_connected(bool _simplify=true, bool _sort=true) {
+AExpression AExpression::get_connected(const bool _simplify, const bool _sort) const {
+    // TODO prealloc
     std::vector<ATerm> newterms;
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (terms[i].connected()) {
@@ -1583,7 +1518,7 @@ AExpression AExpression::get_connected(bool _simplify=true, bool _sort=true) {
     return AExpression(newterms, _simplify, _sort);
 }
 
-bool AExpression::pmatch(AExpression other) {
+bool AExpression::pmatch(const AExpression &other) const {
     if (terms.size() != other.terms.size()) {
         return false;
     }
@@ -1604,7 +1539,7 @@ bool AExpression::pmatch(AExpression other) {
     return true;
 }
 
-void AExpression::transpose(std::vector<int> perm) {
+void AExpression::transpose(const std::vector<int> &perm) {
     for (unsigned int i = 0; i < terms.size(); i++) {
         terms[i].transpose(perm);
     }
