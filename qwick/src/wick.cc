@@ -164,140 +164,154 @@ std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops) {
 
 // TODO occ keyword
 Expression apply_wick(Expression e) {
+    // Conserve the order of terms under threading such that the
+    // function is deterministic.
     std::vector<Term> to;
 
-    for (unsigned int i = 0; i < e.terms.size(); i++) {
-        Term temp = e.terms[i];
-        std::vector<std::vector<Operator>> olists = split_operators(temp.operators);
+    #pragma omp parallel
+    {
+        std::vector<Term> to_priv;
 
-        bool any_olists = false;
-        for (unsigned int j = 0; j < olists.size(); j++) {
-            if (olists[j].size() != 0) {
-                any_olists = true;
-                break;
+        #pragma omp for nowait schedule(static)
+        for (unsigned int i = 0; i < e.terms.size(); i++) {
+            Term temp = e.terms[i];
+            std::vector<std::vector<Operator>> olists = split_operators(temp.operators);
+
+            bool any_olists = false;
+            for (unsigned int j = 0; j < olists.size(); j++) {
+                if (olists[j].size() != 0) {
+                    any_olists = true;
+                    break;
+                }
             }
-        }
-        if (!(any_olists)) {
-            to.push_back(temp.copy());
-            continue;
-        }
-
-        bool all_oparity = true;
-        for (unsigned int j = 0; j < olists.size(); j++) {
-            if (olists[j].size() % 2 != 0) {
-                all_oparity = false;
-                break;
-            }
-        }
-        if (!(all_oparity)) {
-            continue;
-        }
-
-        std::vector<std::vector<std::vector<Delta>>> dos;
-        std::vector<std::vector<int>> sos;
-
-        for (unsigned int j = 0; j < olists.size(); j++) {
-            if (olists[j].size() == 0) {
+            if (!(any_olists)) {
+                to_priv.push_back(temp.copy());
                 continue;
             }
 
-            auto plist = pair_list(olists[j]);
-            std::vector<std::vector<Delta>> ds;
-            std::vector<int> ss;
-
-            for (unsigned int k = 0; k < plist.size(); k++) {
-                bool good = plist[k].size() != 0;
-
-                std::vector<std::pair<int, int>> ipairs;
-                std::vector<Delta> deltas;
-
-                for (unsigned int l = 0; l < plist[k].size(); l++) {
-                    auto p = plist[k][l];
-                    auto oi = p.first;
-                    auto oj = p.second;
-
-                    if (oi.idx.space != oj.idx.space) {
-                        good = false;
-                        break;
-                    }
-                    if (!(oi.idx.fermion)) {
-                        deltas.push_back(Delta(oi.idx, oj.idx));
-                    } else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
-                             ((!(is_occupied(oi.idx))) && (!(oi.ca)) && oj.ca)) {
-                        auto itr = std::find(olists[j].begin(), olists[j].end(), oi);
-                        unsigned int ii = std::distance(olists[j].begin(), itr);
-
-                        itr = std::find(olists[j].begin(), olists[j].end(), oj);
-                        unsigned int jj = std::distance(olists[j].begin(), itr);
-
-                        std::pair<int, int> p(ii, jj);
-                        ipairs.push_back(p);
-                        deltas.push_back(Delta(oi.idx, oj.idx));
-                    } else {
-                        good = false;
-                        break;
-                    }
-                }
-
-                if (good) {
-                    ds.push_back(deltas);
-                    ss.push_back(get_sign(ipairs));
+            bool all_oparity = true;
+            for (unsigned int j = 0; j < olists.size(); j++) {
+                if (olists[j].size() % 2 != 0) {
+                    all_oparity = false;
+                    break;
                 }
             }
+            if (!(all_oparity)) {
+                continue;
+            }
 
-            dos.push_back(ds);
-            sos.push_back(ss);
+            std::vector<std::vector<std::vector<Delta>>> dos;
+            std::vector<std::vector<int>> sos;
+
+            for (unsigned int j = 0; j < olists.size(); j++) {
+                if (olists[j].size() == 0) {
+                    continue;
+                }
+
+                auto plist = pair_list(olists[j]);
+                std::vector<std::vector<Delta>> ds;
+                std::vector<int> ss;
+
+                for (unsigned int k = 0; k < plist.size(); k++) {
+                    bool good = plist[k].size() != 0;
+
+                    std::vector<std::pair<int, int>> ipairs;
+                    std::vector<Delta> deltas;
+
+                    for (unsigned int l = 0; l < plist[k].size(); l++) {
+                        auto p = plist[k][l];
+                        auto oi = p.first;
+                        auto oj = p.second;
+
+                        if (oi.idx.space != oj.idx.space) {
+                            good = false;
+                            break;
+                        }
+                        if (!(oi.idx.fermion)) {
+                            deltas.push_back(Delta(oi.idx, oj.idx));
+                        } else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
+                                 ((!(is_occupied(oi.idx))) && (!(oi.ca)) && oj.ca)) {
+                            auto itr = std::find(olists[j].begin(), olists[j].end(), oi);
+                            unsigned int ii = std::distance(olists[j].begin(), itr);
+
+                            itr = std::find(olists[j].begin(), olists[j].end(), oj);
+                            unsigned int jj = std::distance(olists[j].begin(), itr);
+
+                            std::pair<int, int> p(ii, jj);
+                            ipairs.push_back(p);
+                            deltas.push_back(Delta(oi.idx, oj.idx));
+                        } else {
+                            good = false;
+                            break;
+                        }
+                    }
+
+                    if (good) {
+                        ds.push_back(deltas);
+                        ss.push_back(get_sign(ipairs));
+                    }
+                }
+
+                dos.push_back(ds);
+                sos.push_back(ss);
+            }
+
+            assert(sos.size() == dos.size());
+            // Loop over a cartesian product of elements of dos and sos
+            // https://stackoverflow.com/questions/5279051
+            auto product = [](long long a, std::vector<int>& b) { return a*b.size(); };
+            const long long N = std::accumulate(sos.begin(), sos.end(), 1LL, product);
+            std::vector<std::vector<Delta>> dos_prod(sos.size());
+            std::vector<int> sos_prod(sos.size());
+
+            for (long long j = 0; j < N; j++) {
+                std::lldiv_t q {j, 0};
+                for (long long k = sos.size()-1; k >= 0; k--) {
+                    q = std::div(q.quot, sos[k].size());
+                    sos_prod[k] = sos[k][q.rem];
+                    dos_prod[k] = dos[k][q.rem];
+                }
+
+                // assert sos_prod
+                // assert dos_prod
+
+                int sign = 1;
+                for (unsigned int k = 0; k < sos_prod.size(); k++) {
+                    sign *= sos_prod[k];
+                }
+
+                std::vector<Delta> deltas;
+                for (unsigned int k = 0; k < dos_prod.size(); k++) {
+                    for (unsigned int l = 0; l < dos_prod[k].size(); l++) {
+                        deltas.push_back(dos_prod[k][l]);
+                    }
+                }
+
+                double scalar = sign * temp.scalar;
+
+                std::vector<Sigma> sums(temp.sums.size());
+                std::vector<Tensor> tensors(temp.tensors.size());
+                std::vector<Operator> operators(0);
+
+                for (unsigned int k = 0; k < temp.sums.size(); k++) {
+                    sums[k] = temp.sums[k].copy();
+                }
+                for (unsigned int k = 0; k < temp.tensors.size(); k++) {
+                    tensors[k] = temp.tensors[k].copy();
+                }
+                for (auto k = temp.deltas.begin(); k < temp.deltas.end(); k++) {
+                    deltas.push_back((*k).copy());
+                }
+
+                Term t1(scalar, sums, tensors, operators, deltas, temp.index_key);
+                to_priv.push_back(t1);
+            }
         }
 
-        assert(sos.size() == dos.size());
-        // Loop over a cartesian product of elements of dos and sos
-        // https://stackoverflow.com/questions/5279051
-        auto product = [](long long a, std::vector<int>& b) { return a*b.size(); };
-        const long long N = std::accumulate(sos.begin(), sos.end(), 1LL, product);
-        std::vector<std::vector<Delta>> dos_prod(sos.size());
-        std::vector<int> sos_prod(sos.size());
-
-        for (long long j = 0; j < N; j++) {
-            std::lldiv_t q {j, 0};
-            for (long long k = sos.size()-1; k >= 0; k--) {
-                q = std::div(q.quot, sos[k].size());
-                sos_prod[k] = sos[k][q.rem];
-                dos_prod[k] = dos[k][q.rem];
-            }
-
-            // assert sos_prod
-            // assert dos_prod
-
-            int sign = 1;
-            for (unsigned int k = 0; k < sos_prod.size(); k++) {
-                sign *= sos_prod[k];
-            }
-
-            std::vector<Delta> deltas;
-            for (unsigned int k = 0; k < dos_prod.size(); k++) {
-                for (unsigned int l = 0; l < dos_prod[k].size(); l++) {
-                    deltas.push_back(dos_prod[k][l]);
-                }
-            }
-
-            double scalar = sign * temp.scalar;
-
-            std::vector<Sigma> sums(temp.sums.size());
-            std::vector<Tensor> tensors(temp.tensors.size());
-            std::vector<Operator> operators(0);
-
-            for (unsigned int k = 0; k < temp.sums.size(); k++) {
-                sums[k] = temp.sums[k].copy();
-            }
-            for (unsigned int k = 0; k < temp.tensors.size(); k++) {
-                tensors[k] = temp.tensors[k].copy();
-            }
-            for (auto k = temp.deltas.begin(); k < temp.deltas.end(); k++) {
-                deltas.push_back((*k).copy());
-            }
-
-            Term t1(scalar, sums, tensors, operators, deltas, temp.index_key);
-            to.push_back(t1);
+        #pragma omp for schedule(static) ordered
+        for (unsigned int i = 0; i < omp_get_num_threads(); i++) {
+            #pragma omp ordered
+            to.insert(to.end(), to_priv.begin(), to_priv.end());
         }
     }
 

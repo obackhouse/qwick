@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <utility>
 #include <string>
+#include <omp.h>
 
 #include "index.h"
 #include "operator.h"

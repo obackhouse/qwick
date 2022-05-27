@@ -1250,6 +1250,7 @@ Expression::Expression(const std::vector<Term> &_terms) {
 }
 
 void Expression::resolve() {
+    #pragma omp parallel for
     for (unsigned int i = 0; i < terms.size(); i++) {
         terms[i].resolve();
     }
@@ -1321,12 +1322,15 @@ Expression operator-(const Expression &a, const Expression &b) {
 }
 
 Expression operator*(const Expression &a, const Expression &b) {
-    std::vector<Term> newterms(a.terms.size() * b.terms.size());
+    unsigned int na = a.terms.size();
+    unsigned int nb = b.terms.size();
+    std::vector<Term> newterms(na * nb);
 
-    for (unsigned int i = 0, ij = 0; i < a.terms.size(); i++) {
-        for (unsigned int j = 0; j < b.terms.size(); j++, ij++) {
-            newterms[ij] = a.terms[i] * b.terms[j];
-        }
+    #pragma omp parallel for
+    for (unsigned int ij = 0; ij < (na*nb); ij++) {
+        unsigned int i = ij / nb;
+        unsigned int j = ij % nb;
+        newterms[ij] = a.terms[i] * b.terms[j];
     }
 
     return Expression(newterms);
@@ -1557,12 +1561,15 @@ AExpression operator-(const AExpression &a, const AExpression &b) {
 }
 
 AExpression operator*(const AExpression &a, const AExpression &b) {
-    std::vector<ATerm> newterms(a.terms.size() * b.terms.size());
+    unsigned int na = a.terms.size();
+    unsigned int nb = b.terms.size();
+    std::vector<ATerm> newterms(na * nb);
 
-    for (unsigned int i = 0, ij = 0; i < a.terms.size(); i++) {
-        for (unsigned int j = 0; j < b.terms.size(); j++, ij++) {
-            newterms[ij] = a.terms[i] * b.terms[j];
-        }
+    #pragma omp parallel for
+    for (unsigned int ij = 0; ij < (na*nb); ij++) {
+        unsigned int i = ij / nb;
+        unsigned int j = ij % nb;
+        newterms[ij] = a.terms[i] * b.terms[j];
     }
 
     return AExpression(newterms);

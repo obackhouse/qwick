@@ -7,6 +7,7 @@
 
 #include <utility>
 #include <vector>
+#include <omp.h>
 
 #include "operator.h"
 #include "expression.h"
