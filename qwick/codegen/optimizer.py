@@ -2,9 +2,27 @@
 """
 
 from typing import List, Tuple, Dict
-import drudge
-import gristmill
+try:
+    import drudge
+    import gristmill
+except:
+    drudge = gristmill = None
 import sympy
+
+
+def convert_sizes(sizes):
+    """If the sizes list is passed with strings instead of
+    `sympy.Symbol`, convert the keys.
+    """
+
+    sizes_new = {}
+
+    for key, val in sizes.items():
+        if isinstance(key, str):
+            key = sympy.Symbol(key)
+        sizes_new[key] = val
+
+    return sizes_new
 
 
 def optimize(
@@ -40,6 +58,8 @@ def optimize(
     interm_fmt: str, optional
         Format of intermediate values. Default value is `x{}`.
     """
+
+    sizes = convert_sizes(sizes)
 
     strat = getattr(gristmill.ContrStrat, optimize.upper())
     eqns_opt = gristmill.optimize(

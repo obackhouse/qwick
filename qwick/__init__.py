@@ -39,3 +39,7 @@ sys.modules["qwick.index"] = index
 sys.modules["qwick.operator"] = operator
 sys.modules["qwick.expression"] = expression
 sys.modules["qwick.wick"] = wick
+
+
+# Import the code generation tools:
+from . import codegen
