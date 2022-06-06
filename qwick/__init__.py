@@ -42,4 +42,7 @@ sys.modules["qwick.wick"] = wick
 
 
 # Import the code generation tools:
-from . import codegen
+try:
+    from . import codegen
+except ImportError:
+    codegen = None

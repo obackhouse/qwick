@@ -10,7 +10,7 @@ from sympy.core.cache import cacheit
 import copy
 from numbers import Number
 from collections.abc import Sequence
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Type
 
 # TODO make into proper singletons with proper printing
 
@@ -277,6 +277,17 @@ class TensorSymbol(sympy.IndexedBase):
                 raise sympy.tensor.indexed.IndexException("Rank mismatch.")
             return Tensor(self, indices, **kwargs)
 
+    def copy(self, name=None, rank=None, group=None, particles=None):
+        if name is None:
+            name = self.name
+        if rank is None:
+            rank = self.rank
+        if group is None:
+            group = self.group
+        if particles is None:
+            particles = self.particles
+        return self.__class__(name, rank, group=group, particles=particles)
+
 
 class Tensor(sympy.Indexed):
     """Class for a single Tensor instance.
@@ -376,14 +387,16 @@ class Tensor(sympy.Indexed):
 
         return action_to_callable(best["action"])(self.copy(indices=best["indices"]))
 
-    def copy(self, indices: List = None):
+    def copy(self, base: Type = None, indices: List = None):
         """Return a copy with different indices.
         """
 
         if indices is None:
             indices = copy.copy(self.indices)
+        if base is None:
+            base = self.base.copy()
 
-        tensor = self.base[indices]
+        tensor = base[indices]
         tensor.particle_exchange_symmetry = self.particle_exchange_symmetry
 
         return tensor
@@ -609,7 +622,7 @@ class Term:
             while strfac[-1] == "0" and strfac[-2] != ".":
                 strfac = strfac[:-1]
 
-        dummy_names = [index.name for index in self.dummy_indices]
+        dummy_names = [str(index) for index in self.dummy_indices]
         out += strfac + " "
         if len(dummy_names):
             out += "sum_{%s} " % ", ".join(dummy_names)
@@ -724,29 +737,92 @@ class Term:
                 args = (self.factor, product)
             else:
                 args = (self.factor, *product.args)
+
             new_term = Term(self.lhs, args)
             new_term.parent = self
+
+            # Change the LHS indices to spin indices
+            if isinstance(new_term.lhs, Tensor):
+                inds = []
+                for index1 in new_term.lhs.external_indices:
+                    for index2 in new_term.rhs_external_indices:
+                        if (index1.name, index1.space) == (index2.name, index2.space):
+                            inds.append(index2)
+                            break
+                    else:
+                        raise ValueError
+                new_term.lhs = new_term.lhs.copy(indices=inds)
+
             if new_term.factor != 0 and check(new_term):
                 terms.append(new_term)
 
         return terms
 
-    def to_rhf(self):
+    def to_rhf(self, project_onto: List[Tuple[SpinType]] = None):
         """Convert an expression over spatial orbitals with a spin
         tag into a restricted expression.
+
+        project_onto:
+            A list of tuples of spins indicating configurations to
+            project onto for the LHS. If None, project onto all
+            valid spin configurations.
         """
 
-        new_tensors = []
+        if project_onto is not None:
+            assert all(isinstance(x, tuple) for x in project_onto)
+            spins = tuple(index.spin for index in self.lhs.indices)
+            if spins not in project_onto:
+                return Term(self.lhs, (0,))
+
+        new_rhs = []
         for tensor in self.rhs_tensors:
             restricted_indices = []
             for index in tensor.indices:
                 restricted_indices.append(index.__class__(index.name, index.space, spin=None))
             new_tensor = tensor.copy(indices=restricted_indices)
-            new_tensors.append(new_tensor)
+            new_rhs.append(new_tensor)
 
-        new_tensors = [self.factor] + new_tensors
+        new_rhs = [self.factor] + new_rhs
 
-        new_term = Term(self.lhs, new_tensors)
+        if isinstance(self.lhs, Tensor):
+            restricted_indices = []
+            for index in self.lhs.indices:
+                restricted_indices.append(index.__class__(index.name, index.space, spin=None))
+            new_lhs = self.lhs.copy(indices=restricted_indices)
+        else:
+            new_lhs = self.lhs
+
+        new_term = Term(new_lhs, new_rhs)
+        new_term.parent = self
+
+        return new_term
+
+    def to_uhf(self):
+        """Convert an expression over spatial orbitals with a spin
+        tag into an unrestricted expression.
+        """
+
+        new_rhs = []
+        for tensor in self.rhs_tensors:
+            restricted_indices = []
+            for index in tensor.indices:
+                restricted_indices.append(index.__class__(index.name, index.space, spin=None))
+            spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in tensor.indices])
+            base = tensor.base.copy(name=tensor.base.name + "_" + spin)
+            new_tensor = tensor.copy(base=base, indices=restricted_indices)
+            new_rhs.append(new_tensor)
+
+        if isinstance(self.lhs, Tensor):
+            restricted_indices = []
+            for index in self.lhs.indices:
+                restricted_indices.append(index.__class__(index.name, index.space, spin=None))
+            spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in self.lhs.indices])
+            base = self.lhs.base.copy(name=self.lhs.base.name + "_" + spin)
+            new_lhs = self.lhs.copy(base=base, indices=restricted_indices)
+        else:
+            new_lhs = self.lhs
+
+        new_term = Term(new_lhs, new_rhs)
         new_term.parent = self
 
         return new_term
@@ -807,7 +883,7 @@ def combine_terms(terms):
     return new_terms
 
 
-def ghf_to_rhf(terms, indices):
+def ghf_to_rhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
     """Convert a list of Terms in a spin-orbital basis to a list of
     Terms over restricted spatial orbitals.
     """
@@ -832,7 +908,40 @@ def ghf_to_rhf(terms, indices):
     terms = [term.canonicalize(indices=indices) for term in terms]
     terms = combine_terms(terms)
 
-    terms = flatten([term.to_rhf() for term in terms])
+    terms = flatten([term.to_rhf(project_onto=project_onto) for term in terms])
+    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = combine_terms(terms)
+
+    return terms
+
+
+def ghf_to_uhf(terms, indices):
+    """Convert a list of Terms in a spin-orbital basis to a list of
+    Terms over unrestricted spatial orbitals.
+    """
+
+
+    def flatten(terms):
+        out = []
+        for term in terms:
+            if isinstance(term, (Sequence, sympy.Tuple)):
+                out += flatten(term)
+            else:
+                out.append(term)
+        return out
+
+    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = combine_terms(terms)
+
+    terms = flatten([term.expand_particle_exchange_symmetry() for term in terms])
+    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = combine_terms(terms)
+
+    terms = flatten([term.expand_spin_orbitals() for term in terms])
+    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = combine_terms(terms)
+
+    terms = flatten([term.to_uhf() for term in terms])
     terms = [term.canonicalize(indices=indices) for term in terms]
     terms = combine_terms(terms)
 
@@ -862,15 +971,20 @@ if __name__ == "__main__":
             particles=[(FERMION, 0), (FERMION, 1), (FERMION, 0), (FERMION, 1)],
     )
 
-    #res = TensorSymbol("res", 4)
-    #terms = [
-    #    Term(res[i, j, a, b], [0.25, v[i, j, k, m], v[b, a, k, m]]),
-    #]
+    res = TensorSymbol("res", 4,
+            # How is this being applied automatically...?
+            group=[((0, 1, 2, 3), IDENTITY), ((1, 0, 3, 2), IDENTITY), ((1, 0, 2, 3), NEGATIVE), ((0, 1, 3, 2), NEGATIVE)],
+            particles=[(FERMION, 0), (FERMION, 1), (FERMION, 0), (FERMION, 1)],
+    )
 
-    res = sympy.Symbol("res")
     terms = [
-        Term(res, [0.25, v[k, l, c, d], v[c, d, k, l]]),
+        Term(res[i, j, a, b], [0.25, v[i, j, c, d], v[c, d, a, b]]),
     ]
+
+    #res = sympy.Symbol("res")
+    #terms = [
+    #    Term(res, [0.25, v[k, l, c, d], v[c, d, k, l]]),
+    #]
 
     for term in terms:
         print(term)
@@ -905,3 +1019,7 @@ if __name__ == "__main__":
 
     for term in ghf_to_rhf(terms, indices):
         print(term)
+
+    from qwick.codegen import sympy_to_drudge
+    print()
+    print(sympy_to_drudge(ghf_to_rhf(terms, indices), indices))

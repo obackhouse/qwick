@@ -1,11 +1,8 @@
 """Convert between formats.
 """
 
+import drudge
 import sympy
-try:
-    import drudge
-except:
-    drudge = None
 from sympy import S
 from qwick.codegen.spin_integrate import *
 
@@ -20,22 +17,23 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
             VIRTUAL:  ["a", "b", "c", "d", "e", "f", "g", "h"] + ["v%d" % n for n in range(25)],
             BOSON:    ["w", "x", "y", "z"] + ["b%d" % n for n in range(25)],
     }
-    index_lists = {key: val.copy() for key, val in index_lists_full.items()}
 
     # Keys are [space, summed, index]
     indices = {}
 
     # Convenience:
-    sectors = {space: set() for space in index_lists.keys()}
+    sectors = {space: set() for space in index_lists_full.keys()}
     has_fermions = False
     has_bosons = False
 
     # Get all the tensor names ahead of time to make sure there is no
     # conflict with index names:
-    symbol_bases = set()
     for term in expr.terms:
         for tensor in term.tensors:
-            symbol_bases.add(tensor.name)
+            for val in index_lists_full.values():
+                if tensor.name in val:
+                    val.remove(tensor.name)
+    index_lists = {key: val.copy() for key, val in index_lists_full.items()}
 
     # Function to consistently convert a `wick.Idx` to a string:
     def idx_to_string(idx, summed):
@@ -203,6 +201,8 @@ def sympy_to_drudge(terms, indices, dr=None):
 
     # Declare dummy indices:
     for rng, space in [(occ, OCCUPIED), (vir, VIRTUAL), (bos, BOSON)]:
+        if (space, None) not in indices["dummies"]:
+            continue
         dumms = [sympy.Symbol(index.name) for index in indices["dummies"][space, None]]
         dr.set_dumms(rng, dumms)
     dr.add_resolver_for_dumms()

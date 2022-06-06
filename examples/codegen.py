@@ -7,11 +7,6 @@ from qwick import codegen
 
 import sympy
 
-import drudge
-import gristmill
-import pyspark
-import dummy_spark
-
 
 # Build the wick statement:
 H1 = one_e("f", ["occ", "vir"], norder=True)
@@ -28,7 +23,7 @@ HTTT = commute(HTT, T)
 HTTTT = commute(HTTT, T)
 Hbar = H + HT + Fraction('1/2')*HTT
 Hbar += Fraction('1/6')*HTTT + Fraction('1/24')*HTTTT
-out = apply_wick(Hbar)
+out = apply_wick(bra2 * Hbar)
 out.resolve()
 expr = AExpression(Ex=out)
 
@@ -42,7 +37,11 @@ particles = {
 terms, indices = codegen.wick_to_sympy(expr, particles)
 
 # Perform spin integration:
-terms = codegen.ghf_to_rhf(terms, indices)
+terms = codegen.ghf_to_rhf(
+        terms,
+        indices,
+        project_onto=[(codegen.ALPHA, codegen.BETA, codegen.ALPHA, codegen.BETA)],
+)
 for term in terms:
     print(term)
 
@@ -54,8 +53,8 @@ sizes = {"nocc": sympy.Symbol("N"), "nvir": sympy.Symbol("N")*5}
 eqns = codegen.optimize(
         [expr],
         sizes=sizes,
-        optimize="exhaust",
-        verify=False,
+        optimize="greedy",
+        verify=True,
         interm_fmt="x{}",
 )
 
@@ -74,11 +73,10 @@ printer = codegen.EinsumPrinter(
         garbage_collection=True, # Delete intermediates after use
         base_indent=0,           # No indentation
         einsum="lib.einsum",     # Use PySCF einsum function
-        # n.b. the following are defunct with explicit_init=False:
         zeros="np.zeros",        # NumPy initialisation
         dtype="np.float64",      # Data type
 )
 print(printer.doprint(eqns))
 
 # Print number of FLOPs:
-print(gristmill.get_flop_cost(eqns))
+print(codegen.get_flop_cost(eqns))

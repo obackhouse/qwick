@@ -2,11 +2,8 @@
 """
 
 from typing import List, Tuple, Dict
-try:
-    import drudge
-    import gristmill
-except:
-    drudge = gristmill = None
+import drudge
+import gristmill
 import sympy
 
 
@@ -74,6 +71,9 @@ def optimize(
         assert gristmill.verify_eval_seq(eqns_opt, eqns, simplify=True)
 
     return eqns_opt
+
+
+get_flop_cost = gristmill.get_flop_cost
 
 
 
