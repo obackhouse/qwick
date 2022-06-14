@@ -12,24 +12,28 @@ from numbers import Number
 from collections.abc import Sequence
 from typing import Tuple, List, Union, Type
 
-# TODO make into proper singletons with proper printing
 
 SpaceType = int
-OCCUPIED = 0
-VIRTUAL = 1
-BOSON = 2
-
 ParticlesType = List[Tuple[int, int]]
-FERMION = 3
-
 GroupType = List[Tuple[Tuple[int], int]]
-IDENTITY = 3
-NEGATIVE = 4
-CONJUGATE = 5
-
 SpinType = int
-ALPHA = 6
-BETA = 7
+
+def singleton_factory(identifier, name):
+    class Singleton(int):
+        def __repr__(self):
+            return name
+    return Singleton(identifier)
+
+OCCUPIED = singleton_factory(0, "occupied")
+VIRTUAL = singleton_factory(1, "virtual")
+BOSON = SBOSON = SCALAR_BOSON = singleton_factory(2, "scalar-boson")
+VBOSON = VECTOR_BOSON = singleton_factory(3, "vector-boson")
+FERMION = singleton_factory(4, "fermion")
+IDENTITY = singleton_factory(5, "identity")
+NEGATIVE = singleton_factory(6, "negative")
+CONJUGATE = singleton_factory(7, "conjugate")
+ALPHA = singleton_factory(8, "alpha")
+BETA = singleton_factory(9, "beta")
 
 
 def permutations_with_signs(seq):
@@ -159,7 +163,7 @@ class TensorSymbol(sympy.IndexedBase):
     """Class for a single Tensor symbol instance.
     """
 
-    def __new__(self, name: str, rank: int, group: GroupType = [], particles: ParticlesType = []):
+    def __new__(self, name: str, rank: int, group: GroupType, particles: ParticlesType):
         base = sympy.IndexedBase.__new__(TensorSymbol, name)
         base.rank = rank
         base.group = group
@@ -259,8 +263,11 @@ class TensorSymbol(sympy.IndexedBase):
 
         particle_types = set(self.particles)
         for particle in particle_types:
-            # FIXME good for bosons too or need different spin singletons?
-            perms = [replace(p, particle, s) for p in perms for s in (ALPHA, BETA)]
+            if particle[0] == SCALAR_BOSON:
+                spins = (None,)
+            else:
+                spins = (ALPHA, BETA)
+            perms = [replace(p, particle, s) for p in perms for s in spins]
 
         perms = [(s, IDENTITY) for s in perms]
 
@@ -508,30 +515,66 @@ class Term:
     def rhs_indices(self):
         return self.rhs_dummy_indices + self.rhs_external_indices
 
-    #def _reset_indices(self, indices, indices_possible):
+    def reset_externals(self, indices):
+        """Reset external indices. This should be done with care.
+        """
+
+        indices = {key: val.copy() for key, val in indices["externals"].items()}
+
+        subs = {}
+        for index in self.external_indices:
+            if index not in subs:
+                # Get next index in the current spin channel:
+                new_index = indices[index.space, index.spin].pop(0)
+
+                # Also pop index with same name from other spin channels:
+                other_spins = {None, ALPHA, BETA}
+                other_spins.remove(index.spin)
+                for spin in other_spins:
+                    tmp = index.__class__(index.name, index.space, spin=spin)
+                    indices[index.space, spin].pop(0)
+
+                # Assign the substitution:
+                subs[index] = new_index
+
+        # Function to substitute indices where necessary:
+        def sub_indices(indices):
+            new_indices = []
+            for index in indices:
+                if index in subs:
+                    new_indices.append(subs[index])
+                else:
+                    new_indices.append(index)
+            return tuple(new_indices)
+
+        # Build new term:
+        lhs = self.lhs
+        if isinstance(lhs, sympy.Indexed):
+            lhs = lhs.copy(indices=sub_indices(lhs.indices))
+        rhs = [self.factor]
+        for tensor in self.rhs_tensors:
+            rhs.append(tensor.copy(indices=sub_indices(tensor.indices)))
+
+        return Term(lhs, rhs)
+
     def reset_dummies(self, indices):
         """Reset indices for canonicalization.
         """
 
-        # Get an inverted indices_possible dictionary:
-        indices_possible = {key: val.copy() for key, val in indices["dummies"].items()}
-        indices_possible_inv = {}
-        for key, val in indices_possible.items():
-            for v in val:
-                indices_possible_inv[v] = key
+        indices = {key: val.copy() for key, val in indices["dummies"].items()}
 
         subs = {}
         for index in self.dummy_indices:
             if index not in subs:
                 # Get next index in the current spin channel:
-                new_index = indices_possible[indices_possible_inv[index]].pop(0)
+                new_index = indices[index.space, index.spin].pop(0)
 
                 # Also pop index with same name from other spin channels:
                 other_spins = {None, ALPHA, BETA}
-                other_spins.remove(indices_possible_inv[index][1])
+                other_spins.remove(index.spin)
                 for spin in other_spins:
                     tmp = index.__class__(index.name, index.space, spin=spin)
-                    indices_possible[indices_possible_inv[tmp]].pop(0)
+                    indices[index.space, spin].pop(0)
 
                 # Assign the substitution:
                 subs[index] = new_index
@@ -703,31 +746,44 @@ class Term:
                 new_tensor += new_tensor_contrib
             expanded_tensors.append(new_tensor)
 
-        # Expand the product between expanded_tensors
+        # Expand the product between expanded_tensors:
         expanded_tensors = expand_products(sympy.Mul(*expanded_tensors))
 
+        # Get the allowed LHS spins:
+        if isinstance(self.lhs, Tensor):
+            allowed_lhs_spins = set(tuple(perm) for perm, action in self.lhs.spin_group)
+
         def check(term):
-            # Check the spin of each index on the same particle is the same
+            # Get the indices on each particle in parent term:
+            # FIXME parent always the same?
             parent = term
             while parent.parent:
                 parent = parent.parent
             index_particles = parent.get_index_particles()
             index_particles = {index.name: particle for index, particle in index_particles.items()}
 
-            spins = {}
-            for index in term.rhs_indices:
-                if index in spins:
-                    if spins[index.name] != spin:
-                        return False
-                spins[index.name] = index.spin
+            ## Check the spin of each index is the same:
+            #spins = {}
+            #for index in term.indices:
+            #    if index in spins:
+            #        if spins[index.name] != index.spin: # ???
+            #            return False
+            #    spins[index.name] = index.spin
 
+            # Check the spin of each index on the same particle is the same:
             spins = {}
-            for index in term.rhs_indices:
+            for index in term.indices:
                 particle = index_particles[index.name]
                 if particle in spins:
                     if spins[particle] != index.spin:
                         return False
                 spins[particle] = index.spin
+
+            # Check the spin on the LHS:
+            if isinstance(self.lhs, Tensor):
+                spins = tuple(index.spin for index in term.lhs.indices)
+                if spins not in allowed_lhs_spins:
+                    return False
 
             return True
 
@@ -741,7 +797,7 @@ class Term:
             new_term = Term(self.lhs, args)
             new_term.parent = self
 
-            # Change the LHS indices to spin indices
+            # Change the LHS indices to spin indices  TODO move?
             if isinstance(new_term.lhs, Tensor):
                 inds = []
                 for index1 in new_term.lhs.external_indices:
@@ -920,6 +976,7 @@ def ghf_to_uhf(terms, indices):
     Terms over unrestricted spatial orbitals.
     """
 
+    raise NotImplementedError  # FIXME
 
     def flatten(terms):
         out = []

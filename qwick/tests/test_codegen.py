@@ -44,6 +44,8 @@ class CodegenTest(unittest.TestCase):
                 "v": ((codegen.FERMION, 0), (codegen.FERMION, 1), (codegen.FERMION, 0), (codegen.FERMION, 1)),
                 "t1": ((codegen.FERMION, 0), (codegen.FERMION, 0)),
                 "t2": ((codegen.FERMION, 0), (codegen.FERMION, 1), (codegen.FERMION, 0), (codegen.FERMION, 1)),
+                "t1new": ((codegen.FERMION, 0), (codegen.FERMION, 0)),
+                "t2new": ((codegen.FERMION, 0), (codegen.FERMION, 1), (codegen.FERMION, 0), (codegen.FERMION, 1)),
         }
 
         cls.printer = codegen.EinsumPrinter(
@@ -69,6 +71,8 @@ class CodegenTest(unittest.TestCase):
         cls.mol = gto.Mole()
         cls.mol.atom = "O 0 0 0; O 0 0 1"
         cls.mol.basis = "6-31g"
+        cls.mol.atom = "He 0 0 0"
+        cls.mol.basis = "cc-pvdz"
         cls.mol.verbose = 0
         cls.mol.build()
 
@@ -76,7 +80,7 @@ class CodegenTest(unittest.TestCase):
         cls.mf.kernel()
 
         cls.ccsd = cc.CCSD(cls.mf)
-        cls.ccsd.max_cycle = 3
+        cls.ccsd.max_cycle = 1
         cls.ccsd.kernel()
 
         cls.nocc = np.sum(cls.mf.mo_occ > 0)
@@ -183,6 +187,8 @@ class CodegenTest(unittest.TestCase):
 
         ref = self.ccsd.update_amps(t1=t1, t2=t2, eris=ccsd.ao2mo())[1]
 
+        with open("tmp.dat", "w") as out:
+            out.write(self.printer.doprint(eqns))
         exec(self.printer.doprint(eqns))
         locals()["t2new"] /= e_ijab
         self.assertAlmostEqual(np.max(np.abs(ref - locals()["t2new"])), 0.0, 8)
