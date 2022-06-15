@@ -1412,8 +1412,89 @@ AExpression::AExpression(const Expression &ex, const bool _simplify, const bool 
 }
 
 void AExpression::simplify() {
-    // TODO prealloc
+    // Different algorithm to wick - linear in terms
+
     std::vector<ATerm> newterms;
+    newterms.reserve(terms.size());
+    for (unsigned int i = 0; i < terms.size(); i++) {
+        if (fabs(terms[i].scalar) > tthresh) {
+            newterms.push_back(terms[i]);
+        }
+    }
+
+    // Build all possible TermMap hashes for each term
+    std::unordered_map<TermMap, std::vector<std::pair<int, int>>, TermMapHash> hash_map;
+    for (unsigned int k = 0; k < newterms.size(); k++) {
+        std::vector<std::vector<std::pair<std::vector<int>, int>>> tlists(newterms[k].tensors.size());
+        for (unsigned int i = 0; i < newterms[k].tensors.size(); i++) {
+            tlists[i] = newterms[k].tensors[i].sym.tlist;
+        }
+
+        // Loop over a cartesian product of elements of tlists
+        // https://stackoverflow.com/questions/5279051
+        auto product = [](long long a, std::vector<std::pair<std::vector<int>, int>>& b) {
+            return a*b.size();
+        };
+        const long long N = std::accumulate(tlists.begin(), tlists.end(), 1LL, product);
+        std::vector<std::pair<std::vector<int>, int>> u(tlists.size());
+
+        for (long long n = 0; n < N; n++) {
+            std::lldiv_t q {n, 0};
+            for (long long i = tlists.size()-1; i >= 0; i--) {
+                q = std::div(q.quot, tlists[i].size());
+                u[i] = tlists[i][q.rem];
+            }
+
+            int sign = 1;
+            for (auto x = u.begin(); x < u.end(); x++) {
+                sign *= (*x).second;
+            }
+
+            // permute
+            assert(newterms[k].tensors.size() == u.size());
+            std::vector<Tensor> newtensors(newterms[k].tensors.size());
+            for (unsigned int x = 0; x < newterms[k].tensors.size(); x++) {
+                newtensors[x] = permute(newterms[k].tensors[x], u[x].first);
+            }
+
+            TermMap tm(newterms[k].sums, newtensors);
+            hash_map[tm].push_back({k, sign});
+        }
+    }
+
+    // Filter terms
+    std::vector<bool> keep(newterms.size(), true);
+    for (unsigned int i = 0; i < newterms.size(); i++) {
+        if (!(keep[i])) {
+            continue;
+        }
+
+        TermMap tm(newterms[i].sums, newterms[i].tensors);
+
+        for (unsigned int k = 0; k < hash_map[tm].size(); k++) {
+            unsigned int j = hash_map[tm][k].first;
+            if (!(keep[j]) || (j <= i)) {
+                continue;
+            }
+            newterms[i].scalar += hash_map[tm][k].second * newterms[j].scalar;
+            keep[j] = false;
+        }
+    }
+
+    terms.clear();
+
+    for (unsigned int i = 0; i < newterms.size(); i++) {
+        if (keep[i] && (fabs(newterms[i].scalar) > tthresh)) {
+            terms.push_back(newterms[i]);
+        }
+    }
+}
+
+// Old:
+/*
+void AExpression::simplify() {
+    std::vector<ATerm> newterms;
+    newterms.reserve(terms.size());
     for (unsigned int i = 0; i < terms.size(); i++) {
         if (fabs(terms[i].scalar) > tthresh) {
             newterms.push_back(terms[i]);
@@ -1455,6 +1536,7 @@ void AExpression::simplify() {
         }
     }
 }
+*/
 
 void AExpression::sort_tensors() {
     for (unsigned int i = 0; i < terms.size(); i++) {
