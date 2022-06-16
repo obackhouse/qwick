@@ -8,6 +8,7 @@
 #include "expression.h"
 
 #include <math.h>
+#include <iostream>
 
 
 TermMap::TermMap() {}
@@ -1055,7 +1056,14 @@ bool ATerm::reducible() const {
         return true;
     }
 
+    volatile bool flag = false;
+
+#pragma omp parallel for shared(flag)
     for (unsigned int i = 0; i < sums.size(); i++) {
+        if (flag) {
+            continue;
+        }
+
         ATerm newterm = copy();
         // FIXME there is a newterm._inc(1) line here in wick, but it does nothing.
         Idx i1 = newterm.sums[i].idx;
@@ -1080,11 +1088,11 @@ bool ATerm::reducible() const {
         assert(m == 2);
 
         if (!(newterm.connected())) {
-            return true;
+            flag = true;
         }
     }
 
-    return false;
+    return flag;
 }
 
 void ATerm::transpose(const std::vector<int> &perm) {
@@ -1250,7 +1258,7 @@ Expression::Expression(const std::vector<Term> &_terms) {
 }
 
 void Expression::resolve() {
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned int i = 0; i < terms.size(); i++) {
         terms[i].resolve();
     }
@@ -1326,7 +1334,7 @@ Expression operator*(const Expression &a, const Expression &b) {
     unsigned int nb = b.terms.size();
     std::vector<Term> newterms(na * nb);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned int ij = 0; ij < (na*nb); ij++) {
         unsigned int i = ij / nb;
         unsigned int j = ij % nb;
@@ -1339,6 +1347,7 @@ Expression operator*(const Expression &a, const Expression &b) {
 Expression operator*(const Expression &a, const double &b) {
     std::vector<Term> newterms(a.terms.size());
 
+#pragma omp parallel for
     for (unsigned int i = 0; i < a.terms.size(); i++) {
         newterms[i] = a.terms[i] * b;
     }
@@ -1353,6 +1362,7 @@ Expression operator*(const double &a, const Expression &b) {
 Expression operator*(const Expression &a, const int &b) {
     std::vector<Term> newterms(a.terms.size());
 
+#pragma omp parallel for
     for (unsigned int i = 0; i < a.terms.size(); i++) {
         newterms[i] = a.terms[i] * b;
     }
@@ -1369,13 +1379,19 @@ bool operator==(const Expression &a, const Expression &b) {
         return false;
     }
 
+    volatile bool flag = true;
+
+#pragma omp parallel for shared(flag)
     for (unsigned int i = 0; i < a.terms.size(); i++) {
+        if (!(flag)) {
+            continue;
+        }
         if (a.terms[i] != b.terms[i]) {
-            return false;
+            flag = false;
         }
     }
 
-    return true;
+    return flag;
 }
 
 bool operator!=(const Expression &a, const Expression &b) {
@@ -1424,41 +1440,57 @@ void AExpression::simplify() {
 
     // Build all possible TermMap hashes for each term
     std::unordered_map<TermMap, std::vector<std::pair<int, int>>, TermMapHash> hash_map;
-    for (unsigned int k = 0; k < newterms.size(); k++) {
-        std::vector<std::vector<std::pair<std::vector<int>, int>>> tlists(newterms[k].tensors.size());
-        for (unsigned int i = 0; i < newterms[k].tensors.size(); i++) {
-            tlists[i] = newterms[k].tensors[i].sym.tlist;
+#pragma omp parallel
+    {
+        std::unordered_map<TermMap, std::vector<std::pair<int, int>>, TermMapHash> hash_map_priv;
+
+#pragma omp for nowait
+        for (unsigned int k = 0; k < newterms.size(); k++) {
+            std::vector<std::vector<std::pair<std::vector<int>, int>>> tlists(newterms[k].tensors.size());
+            for (unsigned int i = 0; i < newterms[k].tensors.size(); i++) {
+                tlists[i] = newterms[k].tensors[i].sym.tlist;
+            }
+
+            // Loop over a cartesian product of elements of tlists
+            // https://stackoverflow.com/questions/5279051
+            auto product = [](long long a, std::vector<std::pair<std::vector<int>, int>>& b) {
+                return a*b.size();
+            };
+            const long long N = std::accumulate(tlists.begin(), tlists.end(), 1LL, product);
+            std::vector<std::pair<std::vector<int>, int>> u(tlists.size());
+
+            for (long long n = 0; n < N; n++) {
+                std::lldiv_t q {n, 0};
+                for (long long i = tlists.size()-1; i >= 0; i--) {
+                    q = std::div(q.quot, tlists[i].size());
+                    u[i] = tlists[i][q.rem];
+                }
+
+                int sign = 1;
+                for (auto x = u.begin(); x < u.end(); x++) {
+                    sign *= (*x).second;
+                }
+
+                // permute
+                assert(newterms[k].tensors.size() == u.size());
+                std::vector<Tensor> newtensors(newterms[k].tensors.size());
+                for (unsigned int x = 0; x < newterms[k].tensors.size(); x++) {
+                    newtensors[x] = permute(newterms[k].tensors[x], u[x].first);
+                }
+
+                TermMap tm(newterms[k].sums, newtensors);
+                hash_map_priv[tm].push_back({k, sign});
+            }
         }
 
-        // Loop over a cartesian product of elements of tlists
-        // https://stackoverflow.com/questions/5279051
-        auto product = [](long long a, std::vector<std::pair<std::vector<int>, int>>& b) {
-            return a*b.size();
-        };
-        const long long N = std::accumulate(tlists.begin(), tlists.end(), 1LL, product);
-        std::vector<std::pair<std::vector<int>, int>> u(tlists.size());
-
-        for (long long n = 0; n < N; n++) {
-            std::lldiv_t q {n, 0};
-            for (long long i = tlists.size()-1; i >= 0; i--) {
-                q = std::div(q.quot, tlists[i].size());
-                u[i] = tlists[i][q.rem];
+#pragma omp critical
+        {
+            for (auto el: hash_map_priv) {
+                hash_map[el.first].insert(
+                        hash_map[el.first].end(),
+                        hash_map_priv[el.first].begin(),
+                        hash_map_priv[el.first].end());
             }
-
-            int sign = 1;
-            for (auto x = u.begin(); x < u.end(); x++) {
-                sign *= (*x).second;
-            }
-
-            // permute
-            assert(newterms[k].tensors.size() == u.size());
-            std::vector<Tensor> newtensors(newterms[k].tensors.size());
-            for (unsigned int x = 0; x < newterms[k].tensors.size(); x++) {
-                newtensors[x] = permute(newterms[k].tensors[x], u[x].first);
-            }
-
-            TermMap tm(newterms[k].sums, newtensors);
-            hash_map[tm].push_back({k, sign});
         }
     }
 
@@ -1482,7 +1514,6 @@ void AExpression::simplify() {
     }
 
     terms.clear();
-
     for (unsigned int i = 0; i < newterms.size(); i++) {
         if (keep[i] && (fabs(newterms[i].scalar) > tthresh)) {
             terms.push_back(newterms[i]);
@@ -1539,6 +1570,7 @@ void AExpression::simplify() {
 */
 
 void AExpression::sort_tensors() {
+#pragma omp parallel for
     for (unsigned int i = 0; i < terms.size(); i++) {
         terms[i].sort_tensors();
     }

@@ -1,15 +1,15 @@
 import unittest
-import test_aterm
-import test_convenience
-import test_expression
-import test_full
-import test_idx
-import test_operators
-import test_sc_rules
-import test_term
-import test_term_map
-import test_test
-import test_wick
+from qwick.tests import test_aterm
+from qwick.tests import test_convenience
+from qwick.tests import test_expression
+from qwick.tests import test_full
+from qwick.tests import test_idx
+from qwick.tests import test_operators
+from qwick.tests import test_sc_rules
+from qwick.tests import test_term
+from qwick.tests import test_term_map
+from qwick.tests import test_test
+from qwick.tests import test_wick
 
 
 def run_suite():
