@@ -18,22 +18,34 @@ ParticlesType = List[Tuple[int, int]]
 GroupType = List[Tuple[Tuple[int], int]]
 SpinType = int
 
-def singleton_factory(identifier, name):
-    class Singleton(int):
-        def __repr__(self):
-            return name
-    return Singleton(identifier)
+class Singleton(int):
+    def __new__(cls, value, name=None):
+        if name is None:
+            name = str(value)
+        s = int.__new__(cls, value)
+        s.value = value
+        s.name = name
+        return s
 
-OCCUPIED = singleton_factory(0, "occupied")
-VIRTUAL = singleton_factory(1, "virtual")
-BOSON = SBOSON = SCALAR_BOSON = singleton_factory(2, "scalar-boson")
-VBOSON = VECTOR_BOSON = singleton_factory(3, "vector-boson")
-FERMION = singleton_factory(4, "fermion")
-IDENTITY = singleton_factory(5, "identity")
-NEGATIVE = singleton_factory(6, "negative")
-CONJUGATE = singleton_factory(7, "conjugate")
-ALPHA = singleton_factory(8, "alpha")
-BETA = singleton_factory(9, "beta")
+    def __reduce__(self):
+        # For pickle
+        args = (self.value,)
+        kwargs = dict(name=self.name)
+        return _dispatch_to_new, (self.__class__, args, kwargs), None
+
+    def __repr__(self):
+        return self.name
+
+OCCUPIED = Singleton(0, name="occupied")
+VIRTUAL = Singleton(1, name="virtual")
+BOSON = SBOSON = SCALAR_BOSON = Singleton(2, name="scalar-boson")
+VBOSON = VECTOR_BOSON = Singleton(3, name="vector-boson")
+FERMION = Singleton(4, name="fermion")
+IDENTITY = Singleton(5, name="identity")
+NEGATIVE = Singleton(6, name="negative")
+CONJUGATE = Singleton(7, name="conjugate")
+ALPHA = Singleton(8, name="alpha")
+BETA = Singleton(9, name="beta")
 
 
 def permutations_with_signs(seq):
@@ -82,6 +94,10 @@ def expand_products(expr):
         return [expr]
 
 
+def _dispatch_to_new(cls, args, kwargs):
+    return cls.__new__(cls, *args, **kwargs)
+
+
 class AIndex(sympy.Symbol):
     """Abstract base class for an Index.
     """
@@ -98,6 +114,12 @@ class AIndex(sympy.Symbol):
             symbols = sympy.symbols(name, cls=lambda name: cls(name, space, spin=spin))
             return symbols
         return AIndex.__xnew_cached__(cls, name, space, spin, **assumptions)
+
+    def __reduce__(self):
+        # For pickle
+        args = (self.name, self.space)
+        kwargs = dict(spin=self.spin, **self.assumptions0)
+        return _dispatch_to_new, (self.__class__, args, kwargs), None
 
     @staticmethod
     def __xnew__(cls, name, space, spin, **assumptions):
@@ -117,8 +139,8 @@ class AIndex(sympy.Symbol):
     def __xnew_cached__(cls, name, space, spin, **assumptions):
         return AIndex.__xnew__(cls, name, space, spin, **assumptions)
 
-    def __getnewargs_ex__(self):
-        return ((self.name, self.space, self.spin), self.assumptions0)
+    #def __getnewargs_ex__(self):
+    #    return ((self.name, self.space, self.spin), self.assumptions0)
 
     def __lt__(self, other):
         return self.sort_key() < other.sort_key()
@@ -172,6 +194,12 @@ class TensorSymbol(sympy.IndexedBase):
         base.exchange_group = base.get_exchange_group()
         base.spin_group = base.get_spin_group()
         return base
+
+    def __reduce__(self):
+        # For pickle
+        args = (self.name, self.rank, self.group, self.particles)
+        kwargs = dict()
+        return _dispatch_to_new, (self.__class__, args, kwargs), None
 
     def get_bare_group(self):
         """Use `group` and `particles` to produce a new `GroupType`
@@ -300,10 +328,16 @@ class Tensor(sympy.Indexed):
     """Class for a single Tensor instance.
     """
 
-    def __new__(self, *args, **kwargs):
-        tensor = sympy.Indexed.__new__(self, *args, **kwargs)
+    def __new__(self, *args):
+        tensor = sympy.Indexed.__new__(self, *args)
         tensor.particle_exchange_symmetry = True
         return tensor
+
+    def __reduce__(self):
+        # For pickle
+        args = (self.base, *self.indices)
+        kwargs = dict()
+        return _dispatch_to_new, (self.__class__, args, kwargs), None
 
     @property
     def group(self):
@@ -424,6 +458,8 @@ class Tensor(sympy.Indexed):
             return (self.base.name, self.indices) < (other.base.name, other.indices)
 
     def __eq__(self, other):
+        if not isinstance(other, Tensor):
+            return False
         return (self.base, self.indices) == (other.base, other.indices)
 
     def __str__(self):

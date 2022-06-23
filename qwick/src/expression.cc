@@ -1324,7 +1324,7 @@ Expression operator+(const Expression &a, const Expression &b) {
 }
 
 Expression operator-(const Expression &a, const Expression &b) {
-    double fac = -1.0;
+    int fac = -1;
     Expression mb = b * fac;
     return (a + mb);
 }
@@ -1669,7 +1669,7 @@ AExpression operator+(const AExpression &a, const AExpression &b) {
 }
 
 AExpression operator-(const AExpression &a, const AExpression &b) {
-    double fac = -1.0;
+    int fac = -1;
     AExpression mb = b * fac;
     return (a + mb);
 }

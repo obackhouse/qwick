@@ -16,7 +16,7 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
     index_lists = {
             OCCUPIED: ["i", "j", "k", "l", "m", "n", "o", "p", "I", "J", "K", "L", "M", "N", "O", "P"],
             VIRTUAL:  ["a", "b", "c", "d", "e", "f", "g", "h", "A", "B", "C", "D", "E", "F", "G", "H"],
-            BOSON:    ["w", "x", "y", "z", "W", "X", "Y", "Z"],
+            BOSON:    ["u", "v", "w", "x", "y", "z", "U", "V", "W", "X", "Y", "Z"],
     }
 
     # Remove any names which conflict with index names:
@@ -103,41 +103,57 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
                 tensor = symb[tuple(inds)]
                 rhs.append(tensor)
 
-        for tensor in term.tensors:
-            if tensor.name == "":
-                # Get output TensorSymbol name and rank:
-                base_name = return_value
-                rank = len(tensor.indices)
+        # If we didn't find an input tensor, must determine the external indices:
+        if len(rhs) == 0:
+            for tensor in term.tensors:
+                for index in tensor.indices:
+                    space = convert_space(index.space)
+                    if index not in externals_map:
+                        externals_map[index] = externals_copy[space].pop(0)
 
-                if rank != 0:
-                    # Get indices:
-                    inds = []
-                    for index in tensor.indices:
-                        space = convert_space(index.space)
-                        if index in dummies_map:
-                            inds.append(dummies_map[index])
-                        elif index in externals_map:
-                            inds.append(externals_map[index])
-                        else:
-                            raise ValueError("Shouldn't happen")
+        # Get output TensorSymbol name and rank:
+        out_tensors = [tensor for tensor in term.tensors if tensor.name == ""]
+        base_name = return_value
+        rank = sum([len(tensor.indices) for tensor in out_tensors])
+        if rank > 0:
+            # Get indices:
+            inds = []
+            for tensor in out_tensors:
+                for index in tensor.indices:
+                    space = convert_space(index.space)
+                    if index in dummies_map:
+                        inds.append(dummies_map[index])
+                    elif index in externals_map:
+                        inds.append(externals_map[index])
+                    else:
+                        raise ValueError("Shouldn't happen")
 
-                    # Get group entry:
-                    group = []
-                    for perm, sign in tensor.sym.tlist:
-                        acc = IDENTITY if sign == 1 else NEGATIVE
+            # Get group entry:
+            group = []
+            for i, tensor in enumerate(out_tensors):
+                for j, (perm, sign) in enumerate(tensor.sym.tlist):
+                    acc = IDENTITY if sign == 1 else NEGATIVE
+                    if i == 0:
                         group.append((perm, acc))
+                    else:
+                        # Combine group for two sets of output indices:
+                        # TODO check this - it happens when generating the ket vectors for moments
+                        perm_old, acc_old = group[j]
+                        perm = perm_old + [p + (max(perm_old)+1) for p in perm]
+                        acc = acc_old if sign == 1 else \
+                                {IDENTITY: NEGATIVE, NEGATIVE: IDENTITY}[acc_old]
+                        group[j] = (perm, acc)
 
-                    # Build TensorSymbol:
-                    symb = TensorSymbol(base_name, rank, group, particles[base_name])
+            # Build TensorSymbol:
+            symb = TensorSymbol(base_name, rank, group, particles[base_name])
 
-                    # Build Tensor:
-                    tensor = symb[tuple(inds)]
-                    lhs = tensor
+            # Build Tensor:
+            tensor = symb[tuple(inds)]
+            lhs = tensor
 
-                else:
-                    # Build output Symbol:
-                    symb = sympy.Symbol(base_name)
-                    lhs = symb
+        else:
+            symb = sympy.Symbol(base_name)
+            lhs = symb
 
         if lhs is None:
             lhs = sympy.Symbol(return_value)

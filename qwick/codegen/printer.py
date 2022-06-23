@@ -27,7 +27,7 @@ def format_float(x, places=14):
 index_to_sector = {
         **{k: "o" for k in (["i", "j", "k", "l", "m", "n", "o", "p", "I", "J", "K", "L", "M", "N", "O", "P"])},
         **{k: "v" for k in (["a", "b", "c", "d", "e", "f", "g", "h", "A", "B", "C", "D", "E", "F", "G", "H"])},
-        **{k: "b" for k in (["w", "x", "y", "z", "W", "X", "Y", "Z"])},
+        **{k: "b" for k in (["u", "v", "w", "x", "y", "z", "U", "V", "W", "X", "Y", "Z"])},
 }
 
 
