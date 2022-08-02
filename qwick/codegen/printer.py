@@ -27,7 +27,7 @@ def format_float(x, places=14):
 index_to_sector = {
         **{k: "o" for k in (["i", "j", "k", "l", "m", "n", "o", "p", "I", "J", "K", "L", "M", "N", "O", "P"])},
         **{k: "v" for k in (["a", "b", "c", "d", "e", "f", "g", "h", "A", "B", "C", "D", "E", "F", "G", "H"])},
-        **{k: "b" for k in (["u", "v", "w", "x", "y", "z", "U", "V", "W", "X", "Y", "Z"])},
+        **{k: "b" for k in (["s", "t", "u", "v", "w", "x", "y", "z", "S", "T", "U", "V", "W", "X", "Y", "Z"])},
 }
 
 
@@ -93,6 +93,17 @@ class EinsumPrinter(gristmill.EinsumPrinter):
                 perm = self.reorder_axes[tensor_entry.base]
                 tensor_entry.indices = [tensor_entry.indices[p] for p in perm]
 
+            # Add spin tags:
+            if any("α" in index.index or "β" in index.index for index in tensor_entry.indices):
+                if not (tensor_entry.base[0] == "x" and tensor_entry.base[1].isnumeric()):
+                    spin = []
+                    for index in tensor_entry.indices:
+                        if "α" in index.index:
+                            spin.append("a")
+                        elif "β" in index.index:
+                            spin.append("b")
+                    tensor_entry.base += "_" + "".join(spin)
+
             self._indexed_proc(tensor_entry, self._print_scal)
 
         else:
@@ -105,9 +116,19 @@ class EinsumPrinter(gristmill.EinsumPrinter):
                 # Add occupancy tags to desired tensors
                 if i.base in self.occupancy_tags:
                     indices = [index.index for index in i.indices]
-                    tags = [index_to_sector[index] for index in indices]
+                    tags = [index_to_sector[index.replace("α", "").replace("β", "")] for index in indices]
                     template = self.occupancy_tags[i.base]
-                    i.base = template.format(base=i.base, tags="".join(tags))
+                    kwargs = dict(base=i.base, tags="".join(tags), spindelim="", spin="")
+                    if any("α" in index.index or "β" in index.index for index in i.indices):
+                        kwargs["spindelim"] = "."
+                        spin = []
+                        for index in i.indices:
+                            if "α" in index.index:
+                                spin.append("a")
+                            elif "β" in index.index:
+                                spin.append("b")
+                        kwargs["spin"] = "".join(spin)
+                    i.base = template.format(**kwargs)
 
                 self._indexed_proc(i, self._print_scal)
                 continue
@@ -143,6 +164,3 @@ class EinsumPrinter(gristmill.EinsumPrinter):
             string = [s for s in string if s.strip()]
             string = "\n".join(string)
         return string
-
-
-

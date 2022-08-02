@@ -7,7 +7,7 @@ from sympy import S
 from qwick.codegen.spin_integrate import *
 
 
-def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
+def wick_to_sympy(expr, particles: dict, skip_symmetry=set(), return_value: str = "res"):
     """Convert from a `wick.AExpression` to a list of `Term`s.
     """
 
@@ -16,7 +16,7 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
     index_lists = {
             OCCUPIED: ["i", "j", "k", "l", "m", "n", "o", "p", "I", "J", "K", "L", "M", "N", "O", "P"],
             VIRTUAL:  ["a", "b", "c", "d", "e", "f", "g", "h", "A", "B", "C", "D", "E", "F", "G", "H"],
-            BOSON:    ["u", "v", "w", "x", "y", "z", "U", "V", "W", "X", "Y", "Z"],
+            BOSON:    ["s", "t", "u", "v", "w", "x", "y", "z", "S", "T", "U", "V", "W", "X", "Y", "Z"],
     }
 
     # Remove any names which conflict with index names:
@@ -92,9 +92,10 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
 
                 # Get group entry:
                 group = []
-                for perm, sign in tensor.sym.tlist:
-                    acc = IDENTITY if sign == 1 else NEGATIVE
-                    group.append((perm, acc))
+                if base_name not in skip_symmetry:
+                    for perm, sign in tensor.sym.tlist:
+                        acc = IDENTITY if sign == 1 else NEGATIVE
+                        group.append((perm, acc))
 
                 # Build TensorSymbol:
                 symb = TensorSymbol(base_name, rank, group, particles[base_name])
@@ -104,7 +105,7 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
                 rhs.append(tensor)
 
         # If we didn't find an input tensor, must determine the external indices:
-        if len(rhs) == 0:
+        if len(rhs) == 1:  # has scalar
             for tensor in term.tensors:
                 for index in tensor.indices:
                     space = convert_space(index.space)
@@ -130,19 +131,20 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
 
             # Get group entry:
             group = []
-            for i, tensor in enumerate(out_tensors):
-                for j, (perm, sign) in enumerate(tensor.sym.tlist):
-                    acc = IDENTITY if sign == 1 else NEGATIVE
-                    if i == 0:
-                        group.append((perm, acc))
-                    else:
-                        # Combine group for two sets of output indices:
-                        # TODO check this - it happens when generating the ket vectors for moments
-                        perm_old, acc_old = group[j]
-                        perm = perm_old + [p + (max(perm_old)+1) for p in perm]
-                        acc = acc_old if sign == 1 else \
-                                {IDENTITY: NEGATIVE, NEGATIVE: IDENTITY}[acc_old]
-                        group[j] = (perm, acc)
+            if base_name not in skip_symmetry:
+                for i, tensor in enumerate(out_tensors):
+                    for j, (perm, sign) in enumerate(tensor.sym.tlist):
+                        acc = IDENTITY if sign == 1 else NEGATIVE
+                        if i == 0:
+                            group.append((perm, acc))
+                        else:
+                            # Combine group for two sets of output indices:
+                            # TODO check this - it happens when generating the ket vectors for moments
+                            perm_old, acc_old = group[j]
+                            perm = perm_old + [p + (max(perm_old)+1) for p in perm]
+                            acc = acc_old if sign == 1 else \
+                                    {IDENTITY: NEGATIVE, NEGATIVE: IDENTITY}[acc_old]
+                            group[j] = (perm, acc)
 
             # Build TensorSymbol:
             symb = TensorSymbol(base_name, rank, group, particles[base_name])
@@ -173,218 +175,9 @@ def wick_to_sympy(expr, particles: dict, return_value: str = "res"):
     return terms, indices
 
 
-# OLD: remove
-def _wick_to_sympy(expr, particles: dict, return_value: str = "res"):
-    """Convert from a `wick.AExpression` to a `Term`.
-    """
-
-    convert_space = lambda space: {"occ": OCCUPIED, "vir": VIRTUAL, "nm": BOSON}[space]
-    index_lists_full = {
-            OCCUPIED: ["i", "j", "k", "l", "m", "n", "o", "p"] + ["o%d" % n for n in range(25)],
-            VIRTUAL:  ["a", "b", "c", "d", "e", "f", "g", "h"] + ["v%d" % n for n in range(25)],
-            BOSON:    ["w", "x", "y", "z"] + ["b%d" % n for n in range(25)],
-    }
-
-    # Keys are [space, summed, index]
-    indices = {}
-
-    # Convenience:
-    sectors = {space: set() for space in index_lists_full.keys()}
-    has_fermions = False
-    has_bosons = False
-
-    # Get all the tensor names ahead of time to make sure there is no
-    # conflict with index names:
-    for term in expr.terms:
-        for tensor in term.tensors:
-            for val in index_lists_full.values():
-                if tensor.name in val:
-                    val.remove(tensor.name)
-    index_lists = {key: val.copy() for key, val in index_lists_full.items()}
-
-    # Function to consistently convert a `wick.Idx` to a string:
-    def idx_to_string(idx, summed):
-        if (idx.space, summed, idx.index) not in indices:
-            next_idx = index_lists[convert_space(idx.space)].pop(0)
-            indices[idx.space, summed, idx.index] = next_idx
-            sectors[convert_space(idx.space)].add(next_idx)
-            if idx.fermion:
-                has_fermions = True
-            else:
-                has_bosons = True
-        return indices[idx.space, summed, idx.index]
-
-    # Get the input tensors and indices:
-    terms = []
-    for term in sorted(expr.terms):
-        rhs = []
-        lhs = None
-
-        # Get the scalar - qwick doesn't currently support fractions
-        # so check within a threshold
-        # FIXME
-        if abs(term.scalar - 1) < 1e-14:
-            rhs.append(S.One)
-        elif abs(term.scalar + 1) < 1e-14:
-            rhs.append(S.NegativeOne)
-        else:
-            rhs.append(term.scalar)
-
-        return_expr = None
-        dummies = set(s.idx for s in term.sums)
-        externals = set()
-        for tensor in term.tensors:
-            for index in tensor.indices:
-                if index not in dummies:
-                    externals.add(index)
-
-        for tensor in term.tensors:
-            if tensor.name != "":
-                # Get TensorSymbol name and rank:
-                base_name = tensor.name
-                rank = len(tensor.indices)
-
-                # Get indices:
-                inds = []
-                for index in tensor.indices:
-                    name = idx_to_string(index, index in dummies)
-                    space = convert_space(index.space)
-                    cls = DummyIndex if index in dummies else ExternalIndex
-                    inds.append(cls(name, space))
-
-                # Get group entry:
-                group = []
-                for perm, sign in tensor.sym.tlist:
-                    acc = IDENTITY if sign == 1 else NEGATIVE
-                    group.append((perm, acc))
-
-                # Build TensorSymbol:
-                symb = TensorSymbol(base_name, rank, group, particles[base_name])
-
-                # Build Tensor:
-                tensor = symb[tuple(inds)]
-                rhs.append(tensor)
-
-        for tensor in term.tensors:
-            if tensor.name == "":
-                # Get output TensorSymbol name and rank:
-                base_name = return_value
-                rank = len(externals)
-
-                if rank != 0:
-                    # Get output indices:
-                    inds = []
-                    for index in tensor.indices:
-                        name = idx_to_string(index, False)
-                        space = convert_space(index.space)
-                        inds.append(ExternalIndex(name, space))
-
-                    # Get group entry:
-                    group = []
-                    for perm, sign in tensor.sym.tlist:
-                        acc = IDENTITY if sign == 1 else NEGATIVE
-                        group.append((perm, acc))
-
-                    # Build output TensorSymbol:
-                    symb = TensorSymbol(base_name, rank, group, particles[base_name])
-
-                    # Build Tensor:
-                    tensor = symb[tuple(inds)]
-                    lhs = tensor
-
-                else:
-                    # Build output Symbol:
-                    symb = sympy.Symbol(base_name)
-                    lhs = symb
-
-        if lhs is None:
-            lhs = sympy.Symbol(return_value)
-            assert len(externals) == 0
-
-        terms.append(Term(lhs, rhs))
-
-    ## Get dummies:
-    #dummies = {
-    #    OCCUPIED: [
-    #        DummyIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (summed and convert_space(space) == OCCUPIED)
-    #    ],
-    #    VIRTUAL: [
-    #        DummyIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (summed and convert_space(space) == VIRTUAL)
-    #    ],
-    #    BOSON: [
-    #        DummyIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (summed and convert_space(space) == BOSON)
-    #    ],
-    #}
-
-    ## Get externals:
-    #externals = {
-    #    OCCUPIED: [
-    #        ExternalIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (not summed and convert_space(space) == OCCUPIED)
-    #    ],
-    #    VIRTUAL: [
-    #        ExternalIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (not summed and convert_space(space) == VIRTUAL)
-    #    ],
-    #    BOSON: [
-    #        ExternalIndex(name, convert_space(space))
-    #        for (space, summed, index), name in indices.items()
-    #        if (not summed and convert_space(space) == BOSON)
-    #    ],
-    #}
-
-    ## Add more dummies:
-    #for space in (OCCUPIED, VIRTUAL, BOSON):
-    #    for name in index_lists[space]:
-    #        index = DummyIndex(name, space)
-    #        dummies[space].append(index)
-
-    # Find the maximum number of externals required in each space:
-    nexternal = {}
-    for space in (OCCUPIED, VIRTUAL, BOSON):
-        nexternal[space] = 0
-        for term in terms:
-            n = sum(int(isinstance(index, ExternalIndex)) for index in term.indices)
-            nexternal[space] = max(nexternal[space], n)
-
-    # Get externals:
-    externals = {space: [] for space in (OCCUPIED, VIRTUAL, BOSON)}
-    for space in (OCCUPIED, VIRTUAL, BOSON):
-        for i in range(nexternal[space]):
-            index = ExternalIndex(index_lists_full[space].pop(0), space)
-            externals[space].append(index)
-
-    # Get dummies:
-    dummies = {space: [] for space in (OCCUPIED, VIRTUAL, BOSON)}
-    for space in (OCCUPIED, VIRTUAL, BOSON):
-        while len(index_lists_full[space]):
-            index = DummyIndex(index_lists_full[space].pop(0), space)
-            dummies[space].append(index)
-
-    # Build full index dictionary:
-    indices = build_indices_dict(dummies, externals)
-
-    # Replace indices in each term:
-    for i, term in enumerate(terms):
-        term = term.reset_dummies(indices)
-        term = term.reset_externals(indices)  # NOTE this is OK yes?
-        terms[i] = term
-
-    return terms, indices
-
-
-def sympy_to_drudge(terms, indices, dr=None):
+def sympy_to_drudge(terms, indices, dr=None, skip_symmetry=set(), restricted=True):
     """Convert from a list of `Term` to `drudge.TensorDef`.
     """
-    # TODO doesn't support UHF
 
     # Initialise drudge:
     if dr is None:
@@ -395,16 +188,30 @@ def sympy_to_drudge(terms, indices, dr=None):
     # Declare spaces:
     nocc = sympy.Symbol("nocc")
     nvir = sympy.Symbol("nvir")
-    nbos = sympy.Symbol("nbos")
     occ = drudge.Range("occ", 0, nocc)
     vir = drudge.Range("vir", 0, nvir)
+    nocca, noccb = (sympy.Symbol("nocc[0]"), sympy.Symbol("nocc[1]"))
+    nvira, nvirb = (sympy.Symbol("nvir[0]"), sympy.Symbol("nvir[1]"))
+    occa, occb = (drudge.Range("occ[0]", 0, nocca), drudge.Range("occ[1]", 0, noccb))
+    vira, virb = (drudge.Range("vir[0]", 0, nvira), drudge.Range("vir[1]", 0, nvirb))
+    nbos = sympy.Symbol("nbos")
     bos = drudge.Range("bos", 0, nbos)
 
     # Declare dummy indices:
     for rng, space in [(occ, OCCUPIED), (vir, VIRTUAL), (bos, BOSON)]:
         if (space, None) not in indices["dummies"]:
             continue
-        dumms = [sympy.Symbol(index.name) for index in indices["dummies"][space, None]]
+        dumms = [sympy.Symbol(repr(index)) for index in indices["dummies"][space, None]]
+        dr.set_dumms(rng, dumms)
+    for rng, space in [(occa, OCCUPIED), (vira, VIRTUAL)]:
+        if (space, ALPHA) not in indices["dummies"]:
+            continue
+        dumms = [sympy.Symbol(repr(index)) for index in indices["dummies"][space, ALPHA]]
+        dr.set_dumms(rng, dumms)
+    for rng, space in [(occb, OCCUPIED), (virb, VIRTUAL)]:
+        if (space, BETA) not in indices["dummies"]:
+            continue
+        dumms = [sympy.Symbol(repr(index)) for index in indices["dummies"][space, BETA]]
         dr.set_dumms(rng, dumms)
     dr.add_resolver_for_dumms()
 
@@ -415,7 +222,7 @@ def sympy_to_drudge(terms, indices, dr=None):
         part = term.factor
         for tensor in term.rhs_tensors:
             base = sympy.IndexedBase(tensor.base.name)
-            indices = [sympy.Symbol(index.name) for index in tensor.indices]
+            indices = [sympy.Symbol(repr(index)) for index in tensor.indices]
             part *= base[tuple(indices)]
             if base not in groups:
                 groups[base] = tensor.group
@@ -425,17 +232,32 @@ def sympy_to_drudge(terms, indices, dr=None):
     assert all(terms[0].lhs == term.lhs for term in terms)
     if isinstance(terms[0].lhs, Tensor):
         lhs = [sympy.IndexedBase(terms[0].lhs.base.name)]
-        for index in terms[0].lhs.indices:
-            lhs.append((
-                sympy.Symbol(index.name),
-                {OCCUPIED: occ, VIRTUAL: vir, BOSON: bos}[index.space],
-            ))
+        if all(i.spin is None for i in terms[0].lhs.indices):
+            for index in terms[0].lhs.indices:
+                lhs.append((
+                    sympy.Symbol(repr(index)),
+                    {OCCUPIED: occ, VIRTUAL: vir, BOSON: bos}[index.space],
+                ))
+        else:
+            spins = [i.spin for i in terms[0].lhs.indices]
+            for index, spin in zip(terms[0].lhs.indices, spins):
+                lhs.append((
+                    sympy.Symbol(repr(index)),
+                    {
+                        OCCUPIED: (occa if spin == ALPHA else occb),
+                        VIRTUAL: (vira if spin == ALPHA else virb),
+                        BOSON: bos,
+                    }[index.space],
+                ))
     else:
         lhs = [sympy.Symbol(terms[0].lhs.name)]
-    tensordef = dr.define(*lhs, dr.einst(expr))
+    rhs = dr.einst(expr)
+    tensordef = dr.define(*lhs, rhs)
 
     # Set symmetry:
     for symb, group in groups.items():
+        if symb.name in skip_symmetry:
+            continue
         perms = []
         for perm, action in group:
             if tuple(perm) != tuple(range(len(perm))):

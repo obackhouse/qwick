@@ -8,9 +8,12 @@ from sympy.core.assumptions import StdFactKB
 from sympy.core.logic import fuzzy_bool
 from sympy.core.cache import cacheit
 import copy
+import os
 from numbers import Number
 from collections.abc import Sequence
+from collections import defaultdict
 from typing import Tuple, List, Union, Type
+from joblib import Parallel, delayed
 
 
 SpaceType = int
@@ -146,11 +149,14 @@ class AIndex(sympy.Symbol):
         return self.sort_key() < other.sort_key()
 
     def __hash__(self):
-        return hash((self.name, self.space, self.spin))
+        return hash((self.__class__, self.name, self.space, self.spin))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @cacheit
     def sort_key(self, order=None):
-        return self.class_key(), (1, (self.name, self.space, self.spin)), S.One.sort_key(), S.One
+        return self.class_key(), (1, (self.__class__, self.space, self.name, self.spin)), S.One.sort_key(), S.One
 
     def __str__(self):
         out = sympy.Symbol.__str__(self)
@@ -199,7 +205,14 @@ class TensorSymbol(sympy.IndexedBase):
         # For pickle
         args = (self.name, self.rank, self.group, self.particles)
         kwargs = dict()
-        return _dispatch_to_new, (self.__class__, args, kwargs), None
+        attrs = dict(
+                group=self.group,
+                particles=self.particles,
+                bare_group=self.bare_group,
+                exchange_group=self.exchange_group,
+                spin_group=self.spin_group,
+        )
+        return _dispatch_to_new, (self.__class__, args, kwargs), attrs
 
     def get_bare_group(self):
         """Use `group` and `particles` to produce a new `GroupType`
@@ -241,6 +254,7 @@ class TensorSymbol(sympy.IndexedBase):
         first_index = {}
         for i, particle in enumerate(self.particles):
             particle_counts[particle] = particle_counts.get(particle, 0) + 1
+            #first_index[particle] = i
             if particle not in first_index:
                 first_index[particle] = i
         assert all(n <= 2 for n in particle_counts.values())
@@ -337,7 +351,8 @@ class Tensor(sympy.Indexed):
         # For pickle
         args = (self.base, *self.indices)
         kwargs = dict()
-        return _dispatch_to_new, (self.__class__, args, kwargs), None
+        attrs = dict(particle_exchange_symmetry=self.particle_exchange_symmetry)
+        return _dispatch_to_new, (self.__class__, args, kwargs), attrs
 
     @property
     def group(self):
@@ -486,13 +501,27 @@ class Term:
         elif len(rhs) == 1:
             self.rhs = rhs
         else:
-            mul = sympy.Mul(*rhs).expand()
-            if isinstance(mul, sympy.Add):
-                raise NotImplementedError
-            elif isinstance(mul, Tensor):
-                self.rhs = (mul,)
-            else:
-                self.rhs = tuple(mul.args)
+            # Expand the multiplication where necessary
+            parts = [1]
+
+            def expand(arg):
+                if isinstance(arg, (int, float, sympy.Number)):
+                    parts[0] *= arg
+                elif isinstance(arg, Tensor):
+                    parts.append(arg)
+                elif isinstance(arg, sympy.Mul):
+                    for a in arg.args:
+                        expand(a)
+                elif isinstance(arg, sympy.Pow):
+                    for i in range(arg.exp):
+                        expand(arg.base)
+                else:
+                    raise NotImplementedError("Term expansion for %s: %s" % (arg.__class__.__name__, arg))
+
+            for arg in rhs:
+                expand(arg)
+
+            self.rhs = tuple(parts)
 
         assert isinstance(self.lhs, (sympy.Symbol, Tensor))
         assert all(isinstance(x, (sympy.Number, Number, Tensor)) for x in self.rhs)
@@ -723,6 +752,21 @@ class Term:
 
         return Term(lhs, rhs)
 
+    def __mul__(self, other):
+        if not isinstance(other, (int, float)):
+            raise NotImplementedError
+
+        lhs = self.lhs
+        rhs = [self.factor * other,] + list(self.rhs_tensors)
+
+        return Term(lhs, rhs)
+
+    def __eq__(self, other):
+        return (self.lhs, tuple(self.rhs)) == (other.lhs, tuple(other.rhs))
+
+    def __lt__(self, other):
+        return (self.lhs, tuple(self.rhs)) < (other.lhs, tuple(other.rhs))
+
     def expand_particle_exchange_symmetry(self):
         """Remove the particle exchange symmetry by expanding through
         the permutations with their signs for each term. Returns a
@@ -732,11 +776,12 @@ class Term:
 
         expanded_tensors = []
         for tensor in self.rhs_tensors:
-            new_tensor = 0
+            new_tensor_args = []
             for perm, action in tensor.exchange_group:
                 new_tensor_contrib = tensor.permute_indices(perm)
                 new_tensor_contrib = action_to_callable(action)(new_tensor_contrib)
-                new_tensor += new_tensor_contrib
+                new_tensor_args.append(new_tensor_contrib)
+            new_tensor = sympy.Add(*new_tensor_args)
             expanded_tensors.append(new_tensor)
 
         # Expand the product between expanded_tensors
@@ -772,14 +817,15 @@ class Term:
 
         expanded_tensors = []
         for tensor in self.rhs_tensors:
-            new_tensor = 0
+            new_tensor_args = []
             for perm, action in tensor.spin_group:
                 spin_indices = []
                 for index, spin in zip(tensor.indices, perm):
                     spin_indices.append(index.__class__(index.name, index.space, spin=spin))
                 new_tensor_contrib = tensor.copy(indices=spin_indices)
                 new_tensor_contrib = action_to_callable(action)(new_tensor_contrib)
-                new_tensor += new_tensor_contrib
+                new_tensor_args.append(new_tensor_contrib)
+            new_tensor = sympy.Add(*new_tensor_args)
             expanded_tensors.append(new_tensor)
 
         # Expand the product between expanded_tensors:
@@ -861,6 +907,8 @@ class Term:
         """
 
         if project_onto is not None:
+            if isinstance(project_onto, dict):
+                project_onto = project_onto[self.lhs.base.name]
             assert all(isinstance(x, tuple) for x in project_onto)
             spins = tuple(index.spin for index in self.lhs.indices)
             if spins not in project_onto:
@@ -889,28 +937,32 @@ class Term:
 
         return new_term
 
-    def to_uhf(self):
+    def to_uhf(self, project_onto: List[Tuple[SpinType]] = None):
         """Convert an expression over spatial orbitals with a spin
         tag into an unrestricted expression.
         """
 
+        if project_onto is not None:
+            assert all(isinstance(x, tuple) for x in project_onto)
+            spins = tuple(index.spin for index in self.lhs.indices)
+            if spins not in project_onto:
+                return Term(self.lhs, (0,))
+
         new_rhs = []
         for tensor in self.rhs_tensors:
-            restricted_indices = []
-            for index in tensor.indices:
-                restricted_indices.append(index.__class__(index.name, index.space, spin=None))
-            spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in tensor.indices])
-            base = tensor.base.copy(name=tensor.base.name + "_" + spin)
-            new_tensor = tensor.copy(base=base, indices=restricted_indices)
+            #spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in tensor.indices])
+            #base = tensor.base.copy(name=tensor.base.name + "." + spin)
+            base = tensor.base
+            new_tensor = tensor.copy(base=base, indices=tensor.indices)
             new_rhs.append(new_tensor)
 
+        new_rhs = [self.factor,] + new_rhs
+
         if isinstance(self.lhs, Tensor):
-            restricted_indices = []
-            for index in self.lhs.indices:
-                restricted_indices.append(index.__class__(index.name, index.space, spin=None))
-            spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in self.lhs.indices])
-            base = self.lhs.base.copy(name=self.lhs.base.name + "_" + spin)
-            new_lhs = self.lhs.copy(base=base, indices=restricted_indices)
+            #spin = "".join([{ALPHA: "a", BETA: "b"}[index.spin] for index in self.lhs.indices])
+            #base = self.lhs.base.copy(name=self.lhs.base.name + "_" + spin)
+            base = self.lhs.base
+            new_lhs = self.lhs.copy(base=base, indices=self.lhs.indices)
         else:
             new_lhs = self.lhs
 
@@ -975,70 +1027,250 @@ def combine_terms(terms):
     return new_terms
 
 
+# These can't be local functions as they need to be picklable:
+
+#def _process1(terms, indices):
+#    terms = [term.canonicalize(indices=indices) for term in terms]
+#    return terms
+#
+#def _process2(terms, indices):
+#    terms = [term.expand_particle_exchange_symmetry() for term in terms]
+#    terms = [term.canonicalize(indices=indices) for term in flatten([terms])]
+#    return terms
+#
+#def _process3(terms, indices):
+#    terms = [term.expand_spin_orbitals() for term in terms]
+#    terms = [term.canonicalize(indices=indices) for term in flatten([terms])]
+#    return terms
+#
+#def _process4(terms, indices, project_onto):
+#    terms = [term.to_rhf(project_onto=project_onto) for term in terms]
+#    terms = [term.canonicalize(indices=indices) for term in flatten([terms])]
+#    return terms
+#
+#def ghf_to_rhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
+#    """Convert a list of Terms in a spin-orbital basis to a list of
+#    Terms over restricted spatial orbitals.
+#    """
+#
+#    if os.environ["OMP_NUM_THREADS"] == "":
+#        n_jobs = 1
+#    else:
+#        n_jobs = int(os.environ["OMP_NUM_THREADS"])
+#
+#    parallel = Parallel(n_jobs=n_jobs, batch_size=1, backend="multiprocessing")
+#
+#    def chunk(terms):
+#        chunks = []
+#        p1 = 0
+#        for i in range(n_jobs):
+#            p0 = p1
+#            p1 = p0 + len(terms) // n_jobs if i != (n_jobs-1) else len(terms)
+#            chunks.append(terms[p0:p1])
+#        return chunks
+#
+#    terms = parallel(delayed(_process1)(chunk, indices) for chunk in chunk(terms))
+#    terms = flatten(terms)
+#    terms = combine_terms(terms)
+#
+#    terms = parallel(delayed(_process2)(chunk, indices) for chunk in chunk(terms))
+#    terms = flatten(terms)
+#    terms = combine_terms(terms)
+#
+#    terms = parallel(delayed(_process3)(chunk, indices) for chunk in chunk(terms))
+#    terms = flatten(terms)
+#    terms = combine_terms(terms)
+#    # len(terms) is large here
+#
+#    terms = parallel(delayed(_process4)(chunk, indices, project_onto) for chunk in chunk(terms))
+#    terms = flatten(terms)
+#    terms = combine_terms(terms)
+#
+#    return terms
+
+def _flatten(terms):
+    out = []
+    for term in terms:
+        if isinstance(term, (Sequence, sympy.Tuple)):
+            out += _flatten(term)
+        else:
+            out.append(term)
+    return out
+
+def _canonicalize(terms, indices):
+    terms = [term.canonicalize(indices=indices) for term in terms]
+    return terms
+
+def _process_rhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
+    terms = combine_terms(terms)
+
+    terms = [term.expand_particle_exchange_symmetry() for term in terms]
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
+    terms = combine_terms(terms)
+
+    terms = [term.expand_spin_orbitals() for term in terms]
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
+    terms = combine_terms(terms)
+
+    terms = [term.to_rhf(project_onto=project_onto) for term in terms]
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
+    terms = combine_terms(terms)
+
+    return terms
+
 def ghf_to_rhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
     """Convert a list of Terms in a spin-orbital basis to a list of
     Terms over restricted spatial orbitals.
     """
 
-    def flatten(terms):
-        out = []
-        for term in terms:
-            if isinstance(term, (Sequence, sympy.Tuple)):
-                out += flatten(term)
-            else:
-                out.append(term)
-        return out
+    if os.environ["OMP_NUM_THREADS"] == "":
+        n_jobs = 1
+    else:
+        n_jobs = int(os.environ["OMP_NUM_THREADS"])
 
-    terms = [term.canonicalize(indices=indices) for term in terms]
+    parallel = Parallel(n_jobs=n_jobs, batch_size=1, backend="multiprocessing")
+
+    def chunk(terms):
+        chunks = []
+        for i in range(0, len(terms), 10):
+            p0, p1 = i, i+10
+            chunks.append(terms[p0:p1])
+        return chunks
+
+    terms = parallel(delayed(_process_rhf)(chunk, indices, project_onto) for chunk in chunk(terms))
+    terms = _flatten(terms)
     terms = combine_terms(terms)
 
-    terms = flatten([term.expand_particle_exchange_symmetry() for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
+    groups = [[terms[0]]]
+    for term in terms[1:]:
+        for i, group in enumerate(groups):
+            if group[0].lhs == term.lhs:
+                groups[i].append(term)
+                break
+        else:
+            groups.append([term])
+
+    return groups
+
+def _process_uhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
     terms = combine_terms(terms)
 
-    terms = flatten([term.expand_spin_orbitals() for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = [term.expand_particle_exchange_symmetry() for term in terms]
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
     terms = combine_terms(terms)
 
-    terms = flatten([term.to_rhf(project_onto=project_onto) for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
+    terms = [term.expand_spin_orbitals() for term in terms]
+    terms = _flatten(terms)
+    terms = _canonicalize(terms, indices)
     terms = combine_terms(terms)
+
+    #terms = [term.to_uhf(project_onto=project_onto) for term in terms]
+    #terms = _flatten(terms)
+    #terms = _canonicalize(terms, indices)
+    #terms = combine_terms(terms)
 
     return terms
 
-
-def ghf_to_uhf(terms, indices):
+def ghf_to_uhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
     """Convert a list of Terms in a spin-orbital basis to a list of
     Terms over unrestricted spatial orbitals.
     """
 
-    raise NotImplementedError  # FIXME
+    if os.environ["OMP_NUM_THREADS"] == "":
+        n_jobs = 1
+    else:
+        n_jobs = int(os.environ["OMP_NUM_THREADS"])
 
-    def flatten(terms):
-        out = []
-        for term in terms:
-            if isinstance(term, (Sequence, sympy.Tuple)):
-                out += flatten(term)
-            else:
-                out.append(term)
-        return out
+    parallel = Parallel(n_jobs=n_jobs, batch_size=1, backend="multiprocessing")
 
-    terms = [term.canonicalize(indices=indices) for term in terms]
+    def chunk(terms):
+        chunks = []
+        for i in range(0, len(terms), 10):
+            p0, p1 = i, i+10
+            chunks.append(terms[p0:p1])
+        return chunks
+
+    terms = parallel(delayed(_process_uhf)(chunk, indices, project_onto) for chunk in chunk(terms))
+    terms = _flatten(terms)
     terms = combine_terms(terms)
 
-    terms = flatten([term.expand_particle_exchange_symmetry() for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
-    terms = combine_terms(terms)
+    groups = [[terms[0]]]
+    for term in terms[1:]:
+        for i, group in enumerate(groups):
+            if group[0].lhs == term.lhs:
+                groups[i].append(term)
+                break
+        else:
+            groups.append([term])
 
-    terms = flatten([term.expand_spin_orbitals() for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
-    terms = combine_terms(terms)
+    return groups
 
-    terms = flatten([term.to_uhf() for term in terms])
-    terms = [term.canonicalize(indices=indices) for term in terms]
-    terms = combine_terms(terms)
 
-    return terms
+def simplify_deltas(term):
+    """Simplify any expressions containing delta functions where the
+    delta function can be removed and indices manipulated accordingly.
+    """
+
+    lhs = term.lhs
+    rhs = []
+    index_counts = defaultdict(int)
+
+    def _subs_indices(tensor, subs):
+        if not isinstance(tensor, Tensor):
+            return tensor
+        indices = tuple(subs.get(i, i) for i in tensor.indices)
+        return tensor.copy(indices=indices)
+
+    # First, add the non-delta parts of the RHS:
+    for tensor in term.rhs:
+        if not (isinstance(tensor, Tensor) and tensor.base.name == "delta"):
+            rhs.append(tensor)
+            if isinstance(tensor, Tensor):
+                for index in tensor.indices:
+                    index_counts[index] += 1
+
+    # Find the delta functions:
+    deltas = []
+    for tensor in term.rhs:
+        if isinstance(tensor, Tensor) and tensor.base.name == "delta":
+            deltas.append(tensor)
+
+    # Sort them depending on their indices:
+    deltas.sort(key=lambda d: (d.indices[0] != d.indices[1], *d.indices))
+
+    # Resolve the deltas:
+    for delta in deltas:
+        i, j = delta.indices
+        if index_counts[i] == 0 or index_counts[j] == 0:
+            # Case 1: at least one of the indices doesn't appear in the RHS
+            rhs.append(delta)
+            index_counts[i] += 1
+            index_counts[j] += 1
+        elif index_counts[i] > index_counts[j]:
+            # Case 2: i appears more than j, swap i to j
+            rhs = [_subs_indices(t, {i: j}) for t in rhs]
+            index_counts[i], index_counts[j] = \
+                    index_counts[i]-index_counts[j], index_counts[j]+index_counts[i]
+        elif index_counts[j] > index_counts[i]:
+            # Case 3: j appears more than i, swap j to i
+            rhs = [_subs_indices(t, {j: i}) for t in rhs]
+            index_counts[j], index_counts[i] = \
+                    index_counts[j]-index_counts[i], index_counts[i]+index_counts[j]
+        elif index_counts[i] == index_counts[j]:
+            # Case 4: both i and j appear the same (non-zero) number of times
+            rhs = [_subs_indices(t, {i: j}) for t in rhs]
+            index_counts[i], index_counts[j] = 0, index_counts[i]+index_counts[j]
+            rhs.append(delta)
+
+    return Term(lhs, rhs)
 
 
 

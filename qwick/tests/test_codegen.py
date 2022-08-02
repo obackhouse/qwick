@@ -111,7 +111,7 @@ class CodegenTest(unittest.TestCase):
 
         terms, indices = codegen.wick_to_sympy(expr, self.particles, return_value="e")
         terms = codegen.ghf_to_rhf(terms, indices)
-        eqns = [codegen.sympy_to_drudge(terms, indices)]
+        eqns = [codegen.sympy_to_drudge(group, indices, restricted=True) for group in terms]
         eqns_opt = codegen.optimize(
                 eqns,
                 sizes=sizes,
@@ -139,7 +139,7 @@ class CodegenTest(unittest.TestCase):
 
         terms, indices = codegen.wick_to_sympy(expr, self.particles, return_value="t1new")
         terms = codegen.ghf_to_rhf(terms, indices, project_onto=[(codegen.ALPHA, codegen.ALPHA)])
-        eqns = [codegen.sympy_to_drudge(terms, indices)]
+        eqns = [codegen.sympy_to_drudge(group, indices, restricted=True) for group in terms]
         eqns_opt = codegen.optimize(
                 eqns,
                 sizes=sizes,
@@ -170,7 +170,7 @@ class CodegenTest(unittest.TestCase):
 
         terms, indices = codegen.wick_to_sympy(expr, self.particles, return_value="t2new")
         terms = codegen.ghf_to_rhf(terms, indices, project_onto=[(codegen.ALPHA, codegen.BETA, codegen.ALPHA, codegen.BETA)])
-        eqns = [codegen.sympy_to_drudge(terms, indices)]
+        eqns = [codegen.sympy_to_drudge(group, indices, restricted=True) for group in terms]
         eqns_opt = codegen.optimize(
                 eqns,
                 sizes=sizes,
