@@ -128,6 +128,7 @@ int get_sign(std::vector<std::pair<int, int>> &ipairs) {
 std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops) {
     // TODO prealloc
     std::vector<int> ps;
+    ps.reserve(ops.size());
     for (unsigned int i = 0; i < ops.size(); i++) {
         if (ops[i].projector) {
             ps.push_back(i);
@@ -172,7 +173,7 @@ Expression apply_wick(Expression e) {
     {
         std::vector<Term> to_priv;
 
-        #pragma omp for nowait schedule(static)
+        #pragma omp for schedule(dynamic)
         for (unsigned int i = 0; i < e.terms.size(); i++) {
             Term temp = e.terms[i];
             std::vector<std::vector<Operator>> olists = split_operators(temp.operators);
@@ -202,6 +203,8 @@ Expression apply_wick(Expression e) {
 
             std::vector<std::vector<std::vector<Delta>>> dos;
             std::vector<std::vector<int>> sos;
+            dos.reserve(olists.size());
+            sos.reserve(olists.size());
 
             for (unsigned int j = 0; j < olists.size(); j++) {
                 if (olists[j].size() == 0) {
@@ -211,12 +214,16 @@ Expression apply_wick(Expression e) {
                 auto plist = pair_list(olists[j]);
                 std::vector<std::vector<Delta>> ds;
                 std::vector<int> ss;
+                ds.reserve(plist.size());
+                ss.reserve(plist.size());
 
                 for (unsigned int k = 0; k < plist.size(); k++) {
                     bool good = plist[k].size() != 0;
 
                     std::vector<std::pair<int, int>> ipairs;
                     std::vector<Delta> deltas;
+                    ipairs.reserve(plist[k].size());
+                    deltas.reserve(plist[k].size());
 
                     for (unsigned int l = 0; l < plist[k].size(); l++) {
                         auto p = plist[k][l];
@@ -272,9 +279,6 @@ Expression apply_wick(Expression e) {
                     dos_prod[k] = dos[k][q.rem];
                 }
 
-                // assert sos_prod
-                // assert dos_prod
-
                 int sign = 1;
                 for (unsigned int k = 0; k < sos_prod.size(); k++) {
                     sign *= sos_prod[k];
@@ -291,7 +295,8 @@ Expression apply_wick(Expression e) {
 
                 std::vector<Sigma> sums(temp.sums.size());
                 std::vector<Tensor> tensors(temp.tensors.size());
-                std::vector<Operator> operators(0);
+                std::vector<Operator> operators;
+                operators.reserve(temp.deltas.size());
 
                 for (unsigned int k = 0; k < temp.sums.size(); k++) {
                     sums[k] = temp.sums[k].copy();
@@ -308,9 +313,8 @@ Expression apply_wick(Expression e) {
             }
         }
 
-        #pragma omp for schedule(static) ordered
-        for (unsigned int i = 0; i < omp_get_num_threads(); i++) {
-            #pragma omp ordered
+        #pragma omp critical
+        {
             to.insert(to.end(), to_priv.begin(), to_priv.end());
         }
     }
