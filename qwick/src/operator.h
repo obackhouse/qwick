@@ -44,6 +44,13 @@ class Operator{
 bool operator==(const Operator &a, const Operator &b);
 bool operator!=(const Operator &a, const Operator &b);
 
+struct OperatorHash {
+    std::size_t operator()(Operator i) const {
+        return IdxHash()(i.idx) + std::hash<bool>()(i.ca)
+            + std::hash<bool>()(i.fermion) + std::hash<bool>()(i.projector);
+    }
+};
+
 
 // Tensor
 

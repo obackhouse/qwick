@@ -126,7 +126,6 @@ int get_sign(std::vector<std::pair<int, int>> &ipairs) {
 }
 
 std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops) {
-    // TODO prealloc
     std::vector<int> ps;
     ps.reserve(ops.size());
     for (unsigned int i = 0; i < ops.size(); i++) {
@@ -168,6 +167,14 @@ Expression apply_wick(Expression e) {
     // Conserve the order of terms under threading such that the
     // function is deterministic.
     std::vector<Term> to;
+    std::unordered_map<
+        std::vector<std::vector<Operator>>,
+        std::pair<
+            std::vector<std::vector<std::vector<Delta>>>,
+            std::vector<std::vector<int>>
+        >,
+        OListsHash
+    > cache;
 
     #pragma omp parallel
     {
@@ -203,64 +210,80 @@ Expression apply_wick(Expression e) {
 
             std::vector<std::vector<std::vector<Delta>>> dos;
             std::vector<std::vector<int>> sos;
-            dos.reserve(olists.size());
-            sos.reserve(olists.size());
 
-            for (unsigned int j = 0; j < olists.size(); j++) {
-                if (olists[j].size() == 0) {
-                    continue;
-                }
+            bool check;
+            #pragma omp critical
+            check = cache.find(olists) == cache.end();
 
-                auto plist = pair_list(olists[j]);
-                std::vector<std::vector<Delta>> ds;
-                std::vector<int> ss;
-                ds.reserve(plist.size());
-                ss.reserve(plist.size());
+            if (check) {
+                dos.reserve(olists.size());
+                sos.reserve(olists.size());
 
-                for (unsigned int k = 0; k < plist.size(); k++) {
-                    bool good = plist[k].size() != 0;
+                for (unsigned int j = 0; j < olists.size(); j++) {
+                    if (olists[j].size() == 0) {
+                        continue;
+                    }
 
-                    std::vector<std::pair<int, int>> ipairs;
-                    std::vector<Delta> deltas;
-                    ipairs.reserve(plist[k].size());
-                    deltas.reserve(plist[k].size());
+                    auto plist = pair_list(olists[j]);
+                    std::vector<std::vector<Delta>> ds;
+                    std::vector<int> ss;
+                    ds.reserve(plist.size());
+                    ss.reserve(plist.size());
 
-                    for (unsigned int l = 0; l < plist[k].size(); l++) {
-                        auto p = plist[k][l];
-                        auto oi = p.first;
-                        auto oj = p.second;
+                    for (unsigned int k = 0; k < plist.size(); k++) {
+                        bool good = plist[k].size() != 0;
 
-                        if (oi.idx.space != oj.idx.space) {
-                            good = false;
-                            break;
+                        std::vector<std::pair<int, int>> ipairs;
+                        std::vector<Delta> deltas;
+                        ipairs.reserve(plist[k].size());
+                        deltas.reserve(plist[k].size());
+
+                        for (unsigned int l = 0; l < plist[k].size(); l++) {
+                            auto p = plist[k][l];
+                            auto oi = p.first;
+                            auto oj = p.second;
+
+                            if (oi.idx.space != oj.idx.space) {
+                                good = false;
+                                break;
+                            }
+                            if (!(oi.idx.fermion)) {
+                                deltas.push_back(Delta(oi.idx, oj.idx));
+                            } else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
+                                     ((!(is_occupied(oi.idx))) && (!(oi.ca)) && oj.ca)) {
+                                auto itr = std::find(olists[j].begin(), olists[j].end(), oi);
+                                unsigned int ii = std::distance(olists[j].begin(), itr);
+
+                                itr = std::find(olists[j].begin(), olists[j].end(), oj);
+                                unsigned int jj = std::distance(olists[j].begin(), itr);
+
+                                std::pair<int, int> p(ii, jj);
+                                ipairs.push_back(p);
+                                deltas.push_back(Delta(oi.idx, oj.idx));
+                            } else {
+                                good = false;
+                                break;
+                            }
                         }
-                        if (!(oi.idx.fermion)) {
-                            deltas.push_back(Delta(oi.idx, oj.idx));
-                        } else if ((is_occupied(oi.idx) && oi.ca && (!(oj.ca))) ||
-                                 ((!(is_occupied(oi.idx))) && (!(oi.ca)) && oj.ca)) {
-                            auto itr = std::find(olists[j].begin(), olists[j].end(), oi);
-                            unsigned int ii = std::distance(olists[j].begin(), itr);
 
-                            itr = std::find(olists[j].begin(), olists[j].end(), oj);
-                            unsigned int jj = std::distance(olists[j].begin(), itr);
-
-                            std::pair<int, int> p(ii, jj);
-                            ipairs.push_back(p);
-                            deltas.push_back(Delta(oi.idx, oj.idx));
-                        } else {
-                            good = false;
-                            break;
+                        if (good) {
+                            ds.push_back(deltas);
+                            ss.push_back(get_sign(ipairs));
                         }
                     }
 
-                    if (good) {
-                        ds.push_back(deltas);
-                        ss.push_back(get_sign(ipairs));
-                    }
+                    dos.push_back(ds);
+                    sos.push_back(ss);
                 }
 
-                dos.push_back(ds);
-                sos.push_back(ss);
+                #pragma omp critical
+                cache[olists] = {dos, sos};
+            }
+
+            #pragma omp critical
+            {
+                dos = cache[olists].first;
+                sos = cache[olists].second;
             }
 
             assert(sos.size() == dos.size());
@@ -314,9 +337,7 @@ Expression apply_wick(Expression e) {
         }
 
         #pragma omp critical
-        {
-            to.insert(to.end(), to_priv.begin(), to_priv.end());
-        }
+        to.insert(to.end(), to_priv.begin(), to_priv.end());
     }
 
     Expression o(to);

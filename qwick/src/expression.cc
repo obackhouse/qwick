@@ -1432,10 +1432,21 @@ void AExpression::simplify() {
 
     std::vector<ATerm> newterms;
     newterms.reserve(terms.size());
-    for (unsigned int i = 0; i < terms.size(); i++) {
-        if (fabs(terms[i].scalar) > tthresh) {
-            newterms.push_back(terms[i]);
+
+    #pragma omp parallel
+    {
+        std::vector<ATerm> newterms_priv;
+        newterms_priv.reserve(terms.size());
+
+        #pragma omp for
+        for (unsigned int i = 0; i < terms.size(); i++) {
+            if (fabs(terms[i].scalar) > tthresh) {
+                newterms_priv.push_back(terms[i]);
+            }
         }
+
+        #pragma omp critical
+        newterms.insert(newterms.end(), newterms_priv.begin(), newterms_priv.end());
     }
 
     // Build all possible TermMap hashes for each term
@@ -1618,12 +1629,23 @@ bool AExpression::connected() const {
 }
 
 AExpression AExpression::get_connected(const bool _simplify, const bool _sort) const {
-    // TODO prealloc
     std::vector<ATerm> newterms;
-    for (unsigned int i = 0; i < terms.size(); i++) {
-        if (terms[i].connected()) {
-            newterms.push_back(terms[i]);
+    newterms.reserve(terms.size());
+
+    #pragma omp parallel
+    {
+        std::vector<ATerm> newterms_priv;
+        newterms_priv.reserve(terms.size());
+
+        #pragma omp for
+        for (unsigned int i = 0; i < terms.size(); i++) {
+            if (terms[i].connected()) { 
+                newterms_priv.push_back(terms[i]);
+            }
         }
+
+        #pragma omp critical
+        newterms.insert(newterms.end(), newterms_priv.begin(), newterms_priv.end());
     }
 
     return AExpression(newterms, _simplify, _sort);

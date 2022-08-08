@@ -19,5 +19,17 @@ int get_sign(std::vector<std::pair<int, int>> &ipairs);
 std::vector<std::vector<Operator>> split_operators(std::vector<Operator> &ops);
 Expression apply_wick(Expression e);
 
+struct OListsHash {
+    std::size_t operator()(std::vector<std::vector<Operator>> a) const {
+        std::size_t seed = 0;
+        for (auto b = a.begin(); b != a.end(); b++) {
+            for (auto c = (*b).begin(); c != (*b).end(); c++) {
+                seed += OperatorHash()((*c));
+            }
+        }
+        return seed;
+    }
+};
+
 
 #endif  // QWICK_SRC_WICK_H_
