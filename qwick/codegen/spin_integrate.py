@@ -1202,14 +1202,17 @@ def ghf_to_uhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
     terms = _flatten(terms)
     terms = combine_terms(terms)
 
-    groups = [[terms[0]]]
-    for term in terms[1:]:
-        for i, group in enumerate(groups):
-            if group[0].lhs == term.lhs:
-                groups[i].append(term)
-                break
-        else:
-            groups.append([term])
+    if len(terms):
+        groups = [[terms[0]]]
+        for term in terms[1:]:
+            for i, group in enumerate(groups):
+                if group[0].lhs == term.lhs:
+                    groups[i].append(term)
+                    break
+            else:
+                groups.append([term])
+    else:
+        groups = [[]]
 
     return groups
 
