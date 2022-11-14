@@ -6,6 +6,13 @@ __version__ = "0.9.0"
 import sys
 
 
+# Import the code generation tools before the shared objects:
+try:
+    from . import codegen
+except ImportError:
+    codegen = None
+
+
 # Import the shared objects:
 
 from .build import _index as index
@@ -39,10 +46,3 @@ sys.modules["qwick.index"] = index
 sys.modules["qwick.operator"] = operator
 sys.modules["qwick.expression"] = expression
 sys.modules["qwick.wick"] = wick
-
-
-# Import the code generation tools:
-try:
-    from . import codegen
-except ImportError:
-    codegen = None
