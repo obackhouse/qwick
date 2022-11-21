@@ -14,58 +14,42 @@ bool valid_contraction(const Operator &o1, const Operator &o2) {
     }
 
     if (o1.fermion && o2.fermion) {
-        if (is_occupied(o1.idx) && o1.ca && (!(o2.ca))) {
-            return true;
-        }
-        if (!(is_occupied(o1.idx)) && (!(o1.ca)) && o2.ca) {
-            return true;
-        }
-        return false;
+        return ((is_occupied(o1.idx) && o1.ca && (!(o2.ca))) || (!(is_occupied(o1.idx)) && (!(o1.ca)) && o2.ca));
     } else if (!(o1.fermion) && !(o2.fermion)) {
-        if (!(o1.ca) && o2.ca) {
-            return true;
-        }
-        return false;
-    } else if (o1.fermion == o2.fermion) {
-        return true;
+        return (!(o1.ca) && o2.ca);
+    } else {
+        return ((o1.fermion == o2.fermion) && (o1.projector == o2.projector));
     }
-
-    return false;
 }
 
 // TODO occ keyword
 std::vector<std::vector<std::pair<Operator, Operator>>> pair_list(const std::vector<Operator> &lst) {
-    int n = lst.size();
+    const int n = lst.size();
     assert(n % 2 == 0);
 
     if (n < 2) {
         return {};
     } else if (n == 2) {
         if (valid_contraction(lst[0], lst[1])) {
-            std::pair<Operator, Operator> p(lst[0], lst[1]);
-            return {{p}};
+            return {{{lst[0], lst[1]}}};
         } else {
             return {};
         }
     } else {
         std::vector<std::vector<std::pair<Operator, Operator>>> plist;
-        std::vector<Operator> ltmp(lst.begin() + 1, lst.end());
-        for (unsigned int i = 0; i < ltmp.size(); i++) {
-            if (valid_contraction(lst[0], ltmp[i])) {
-                std::pair<Operator, Operator> p1(lst[0], ltmp[i]);
-
-                std::vector<Operator> lrem(ltmp.size()-1);
+        for (unsigned int i = 0; i < (lst.size()-1); i++) {
+            if (valid_contraction(lst[0], lst[i+1])) {
+                std::vector<Operator> lrem(lst.size()-2);
                 for (unsigned int j = 0; j < i; j++) {
-                    lrem[j] = ltmp[j];
+                    lrem[j] = lst[j+1];
                 }
-                for (unsigned int j = i+1; j < ltmp.size(); j++) {
-                    lrem[j-1] = ltmp[j];
+                for (unsigned int j = i+1; j < (lst.size()-1); j++) {
+                    lrem[j-1] = lst[j+1];
                 }
 
                 std::vector<std::vector<std::pair<Operator, Operator>>> rem = pair_list(lrem);
-
                 for (unsigned int j = 0; j < rem.size(); j++) {
-                    rem[j].push_back(p1);
+                    rem[j].push_back({lst[0], lst[i+1]});
                     plist.push_back(rem[j]);
                 }
             }

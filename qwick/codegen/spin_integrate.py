@@ -494,6 +494,15 @@ class Term:
 
     def __init__(self, lhs: Tensor, rhs: List[Union[sympy.Number, Tensor]]):
         self.parent = None
+
+        if isinstance(lhs, sympy.Mul):
+            # Sometimes canonicalisation will make the LHS a Mul with -1
+            assert len(lhs.args) == 2
+            tensor, factor = sorted(lhs.args)
+            assert isinstance(factor, (int, float, sympy.Number))
+            lhs = tensor
+            rhs = [1/factor] + list(rhs)
+
         self.lhs = lhs
 
         if len(rhs) == 0:
@@ -524,7 +533,7 @@ class Term:
             self.rhs = tuple(parts)
 
         assert isinstance(self.lhs, (sympy.Symbol, Tensor))
-        assert all(isinstance(x, (sympy.Number, Number, Tensor)) for x in self.rhs)
+        assert all(isinstance(x, (int, float, sympy.Number, Number, Tensor)) for x in self.rhs)
 
     @property
     def rhs_tensors(self):
@@ -579,6 +588,29 @@ class Term:
     @property
     def rhs_indices(self):
         return self.rhs_dummy_indices + self.rhs_external_indices
+
+    def transpose(self, perm, factor=1):
+        """Transpose the array by exchanging indices in the RHS according
+        to the application of permutation `perm` on the externals as they
+        are ordered in the LHS.
+        """
+
+        #indices = tuple(self.lhs.indices[i] for i in perm)
+        #lhs = self.lhs.copy(indices=indices)
+        #rhs = [factor * self.factor] + list(self.rhs_tensors)
+        #return self.__class__(lhs, rhs)
+
+        externals = self.lhs.indices
+        assert len(perm) == len(externals)
+        external_map = {externals[i]: externals[perm[i]] for i in range(len(perm))}
+
+        rhs = [self.factor * factor]
+        for tensor in self.rhs_tensors:
+            new_indices = [ind if ind not in external_map else external_map[ind] for ind in tensor.indices]
+            new_tensor = tensor.copy(indices=new_indices)
+            rhs.append(new_tensor)
+
+        return self.__class__(self.lhs.copy(), rhs)
 
     def reset_externals(self, indices):
         """Reset external indices. This should be done with care.

@@ -3,6 +3,7 @@
 
 import drudge
 import sympy
+import itertools
 from sympy import S
 from qwick.codegen.spin_integrate import *
 
@@ -161,6 +162,244 @@ def wick_to_sympy(expr, particles: dict, skip_symmetry=set(), return_value: str 
             lhs = sympy.Symbol(return_value)
 
         terms.append(Term(lhs, rhs))
+
+    # Build full index dictionary:
+    indices = build_indices_dict(dummies, externals)
+
+    # Replace indices in each term to make sure they are ordered
+    # canonically:
+    for i, term in enumerate(terms):
+        term = term.reset_dummies(indices)
+        term = term.reset_externals(indices)  # NOTE this is OK yes?
+        terms[i] = term
+
+    return terms, indices
+
+
+def wicked_to_sympy(expr, indices: dict, groups: dict, particles: dict, skip_symmetry=set(), return_value: str = "res"):
+    """Convert from a `wicked` strings generated via `.compile("ambit")`
+    to a list of `Term`s.
+    """
+
+    spaces = (OCCUPIED, VIRTUAL, BOSON)
+    occs = list("ijklmnopIJKLMNOP")
+    virs = list("abcdefghABCDEFGH")
+    externals = {space: [] for space in spaces}
+    dummies = {space: [] for space in spaces}
+
+    # Remove any names which conflict with index names:
+    # FIXME not working - just removed f manually for now
+    for lst in (occs, virs):
+        if return_value in lst:
+            lst.remove(return_value)
+        for line in expr:
+            for entry in line.split()[4::2]:
+                if entry.split("[")[0] in lst:
+                    lst.remove(entry.split("[")[0])
+
+    def _convert_index(ind, cls):
+        space = ind[0]
+        n = int(ind[1:])
+        index = indices[space][n]
+        if index in occs:
+            return cls(occs[n], OCCUPIED)
+        else:
+            return cls(virs[n], VIRTUAL)
+
+    terms = []
+    for line in expr:
+        output, _, factor = line.split()[:3]
+        inputs = line.split()[4::2]
+        inputs[-1] = inputs[-1].strip(";")
+
+        # Get the externals
+        if "[" not in output:
+            ext_inds = []
+        else:
+            ext_inds = output.split("[")[1].strip("]").split(",")
+        ext_inds = [_convert_index(ind, ExternalIndex) for ind in ext_inds]
+        for ind in ext_inds:
+            if ind.space == OCCUPIED and ind not in externals[OCCUPIED]:
+                externals[OCCUPIED].append(ind)
+            if ind.space == VIRTUAL and ind not in externals[VIRTUAL]:
+                externals[VIRTUAL].append(ind)
+
+        # Get the LHS tensor
+        if len(ext_inds):
+            symb = TensorSymbol(return_value, len(ext_inds), groups[return_value], particles[return_value])
+            lhs = symb[tuple(ext_inds)]
+        else:
+            lhs = sympy.Symbol(return_value)
+
+        # Get the RHS tensors
+        rhs = [float(factor)]
+        for entry in inputs:
+            # Get the indices
+            if "[" not in entry:
+                _inds = []
+                name = entry
+            else:
+                name, _inds = entry.split("[")
+                _inds = _inds.strip("]").split(",")
+            inds = []
+            for ind in _inds:
+                ext_ind = _convert_index(ind, ExternalIndex)
+                if ext_ind in ext_inds:
+                    inds.append(ext_ind)
+                else:
+                    inds.append(_convert_index(ind, DummyIndex))
+            for ind in inds:
+                if type(ind) is DummyIndex:
+                    if ind.space == OCCUPIED and ind not in dummies[OCCUPIED]:
+                        dummies[OCCUPIED].append(ind)
+                    if ind.space == VIRTUAL and ind not in dummies[VIRTUAL]:
+                        dummies[VIRTUAL].append(ind)
+
+            # Get the tensor
+            symb = TensorSymbol(name, len(inds), groups[name], particles[name])
+            rhs.append(symb[tuple(inds)])
+
+        terms.append(Term(lhs, rhs))
+
+    # Add the rest of the indices as dummies
+    for i in range(len(occs)):
+        if _convert_index("o%d"%i, ExternalIndex) not in externals[OCCUPIED]:
+            ind = _convert_index("o%d"%i, DummyIndex)
+            if ind not in dummies[OCCUPIED]:
+                dummies[OCCUPIED].append(ind)
+    for i in range(len(virs)):
+        if _convert_index("v%d"%i, ExternalIndex) not in externals[VIRTUAL]:
+            ind = _convert_index("v%d"%i, DummyIndex)
+            if ind not in dummies[VIRTUAL]:
+                dummies[VIRTUAL].append(ind)
+
+    # Build full index dictionary:
+    indices = build_indices_dict(dummies, externals)
+
+    # Replace indices in each term to make sure they are ordered
+    # canonically:
+    for i, term in enumerate(terms):
+        term = term.reset_dummies(indices)
+        term = term.reset_externals(indices)  # NOTE this is OK yes?
+        terms[i] = term
+
+    return terms, indices
+
+
+def pdaggerq_to_sympy(terms, groups: dict, particles: dict, return_value: str = "res", return_indices: tuple = None):
+    """Convert from a list `pdagger` contracted strings to a list
+    of `Term`s.
+    """
+
+    spaces = (OCCUPIED, VIRTUAL, BOSON)
+    occs = list("ijklmnopIJKLMNO")
+    virs = list("abcdeghABCDEFGH")
+    externals = {space: [] for space in spaces}
+    dummies = {space: [] for space in spaces}
+
+    # Remove any names which conflict with index names:
+    # TODO - just removed f, P manually for now
+
+    from pdaggerq.config import OCC_INDICES, VIRT_INDICES
+    def _convert_index(ind, cls):
+        if ind in OCC_INDICES:
+            n = OCC_INDICES.index(ind)
+            return cls(occs[n], OCCUPIED)
+        else:
+            n = VIRT_INDICES.index(ind)
+            return cls(virs[n], VIRTUAL)
+
+    # Dissolve permutation operators
+    i = 0
+    while i != len(terms):
+        perm_ops = [t for t in terms[i] if t.startswith("P")]
+        terms_i = [t for t in terms[i] if not t.startswith("P")]
+        if len(perm_ops):
+            swaps = []
+            for perm_op in perm_ops:
+                i1, i2 = perm_op.replace("P", "").replace("(", "").replace(")", "").split(",")
+                swaps.append(({i1: i1}, {i1: i2}))
+            for swap in itertools.product(*swaps):
+                ind_map = {k: v for d in swap for k, v in d.items()}
+                new_terms_i = [terms_i[0]]
+                for j, tensor in enumerate(terms_i[1:]):
+                    if tensor.startswith("<"):
+                        inds = tensor.replace("<", "").replace(">", "").replace("||", ",").split(",")
+                        inds = tuple(ind_map.get(ind, ind) for ind in inds)
+                        new_terms_i.append("<%s,%s||%s,%s>" % inds)
+                    else:
+                        name = tensor.split("(")[0]
+                        inds = tensor.split("(")[1].replace(")", "").split(",")
+                        inds = tuple(ind_map.get(ind, ind) for ind in inds)
+                        new_terms_i.append("%s(%s)" % (name, ",".join(inds)))
+                terms.append(new_terms_i)
+        terms[i] = terms_i
+        i += 1
+
+    # Get the externals:
+    ext_inds = []
+    for ind in return_indices:
+        ind = _convert_index(ind, ExternalIndex)
+        ext_inds.append(ind)
+        if ind.space == OCCUPIED:
+            externals[OCCUPIED].append(ind)
+        else:
+            externals[VIRTUAL].append(ind)
+
+    # Get the LHS tensor
+    if len(ext_inds):
+        symb = TensorSymbol(return_value, len(ext_inds), groups[return_value], particles[return_value])
+        lhs = symb[tuple(ext_inds)]
+    else:
+        lhs = sympy.Symbol(return_value)
+
+    sympy_terms = []
+    for term in terms:
+        # Get the RHS tensors
+        rhs = [float(term[0].replace("+", ""))]
+        for entry in term[1:]:
+            # Get the indices
+            if entry.startswith("<"):
+                name = "v"
+                _inds = entry.replace("<", "").replace(">", "").replace("||", ",").split(",")
+            else:
+                name = entry.split("(")[0]
+                _inds = entry.split("(")[1].replace(")", "").split(",")
+            inds = []
+            for ind in _inds:
+                ext_ind = _convert_index(ind, ExternalIndex)
+                if ext_ind in ext_inds:
+                    inds.append(ext_ind)
+                else:
+                    inds.append(_convert_index(ind, DummyIndex))
+            for ind in inds:
+                if type(ind) is DummyIndex:
+                    if ind.space == OCCUPIED and ind not in dummies[OCCUPIED]:
+                        dummies[OCCUPIED].append(ind)
+                    if ind.space == VIRTUAL and ind not in dummies[VIRTUAL]:
+                        dummies[VIRTUAL].append(ind)
+
+            # Get the tensor
+            symb = TensorSymbol(name, len(inds), groups[name], particles[name])
+            rhs.append(symb[tuple(inds)])
+
+        sympy_terms.append(Term(lhs, rhs))
+
+    terms = sympy_terms
+
+    # Add the rest of the indices as dummies
+    for i in range(len(occs)):
+        pq_index = OCC_INDICES[i]
+        if _convert_index(pq_index, ExternalIndex) not in externals[OCCUPIED]:
+            ind = _convert_index(pq_index, DummyIndex)
+            if ind not in dummies[OCCUPIED]:
+                dummies[OCCUPIED].append(ind)
+    for i in range(len(virs)):
+        pq_index = VIRT_INDICES[i]
+        if _convert_index(pq_index, ExternalIndex) not in externals[VIRTUAL]:
+            ind = _convert_index(pq_index, DummyIndex)
+            if ind not in dummies[VIRTUAL]:
+                dummies[VIRTUAL].append(ind)
 
     # Build full index dictionary:
     indices = build_indices_dict(dummies, externals)
