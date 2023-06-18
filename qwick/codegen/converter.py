@@ -318,7 +318,7 @@ def pdaggerq_to_sympy(terms, groups: dict, particles: dict, return_value: str = 
             swaps = []
             for perm_op in perm_ops:
                 i1, i2 = perm_op.replace("P", "").replace("(", "").replace(")", "").split(",")
-                swaps.append(({i1: i1}, {i1: i2}))
+                swaps.append(({i2: i1, i1: i2},))
             for swap in itertools.product(*swaps):
                 ind_map = {k: v for d in swap for k, v in d.items()}
                 new_terms_i = [terms_i[0]]
@@ -338,13 +338,14 @@ def pdaggerq_to_sympy(terms, groups: dict, particles: dict, return_value: str = 
 
     # Get the externals:
     ext_inds = []
-    for ind in return_indices:
-        ind = _convert_index(ind, ExternalIndex)
-        ext_inds.append(ind)
-        if ind.space == OCCUPIED:
-            externals[OCCUPIED].append(ind)
-        else:
-            externals[VIRTUAL].append(ind)
+    if return_indices is not None:
+        for ind in return_indices:
+            ind = _convert_index(ind, ExternalIndex)
+            ext_inds.append(ind)
+            if ind.space == OCCUPIED:
+                externals[OCCUPIED].append(ind)
+            else:
+                externals[VIRTUAL].append(ind)
 
     # Get the LHS tensor
     if len(ext_inds):

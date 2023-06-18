@@ -494,6 +494,7 @@ class Term:
 
     def __init__(self, lhs: Tensor, rhs: List[Union[sympy.Number, Tensor]]):
         self.parent = None
+        self.original = self
 
         if isinstance(lhs, sympy.Mul):
             # Sometimes canonicalisation will make the LHS a Mul with -1
@@ -652,7 +653,10 @@ class Term:
         for tensor in self.rhs_tensors:
             rhs.append(tensor.copy(indices=sub_indices(tensor.indices)))
 
-        return Term(lhs, rhs)
+        term = Term(lhs, rhs)
+        term.original = self.original
+
+        return term
 
     def reset_dummies(self, indices):
         """Reset indices for canonicalization.
@@ -694,7 +698,10 @@ class Term:
         for tensor in self.rhs_tensors:
             rhs.append(tensor.copy(indices=sub_indices(tensor.indices)))
 
-        return Term(lhs, rhs)
+        term = Term(lhs, rhs)
+        term.original = self.original
+
+        return term
 
     # FIXME this isn't doing a full canonicalisation
     def canonicalize(self, indices=None):
@@ -719,6 +726,9 @@ class Term:
 
         if indices is not None:
             term = term.reset_dummies(indices)
+
+        # Don't set parent here, because indices change
+        term.original = self.original
 
         return term
 
@@ -826,6 +836,7 @@ class Term:
             else:
                 args = (self.factor, *product.args)
             new_term = Term(self.lhs, args)
+            new_term.original = self.original
             if new_term.factor != 0:
                 terms.append(new_term)
 
@@ -837,6 +848,7 @@ class Term:
         # Set the parent of each of the new terms:
         for term in terms:
             term.parent = self
+            term.original = self.original
 
         return terms
 
@@ -910,6 +922,7 @@ class Term:
 
             new_term = Term(self.lhs, args)
             new_term.parent = self
+            new_term.original = self.original
 
             # Change the LHS indices to spin indices  TODO move?
             if isinstance(new_term.lhs, Tensor):
@@ -928,22 +941,30 @@ class Term:
 
         return terms
 
-    def to_rhf(self, project_onto: List[Tuple[SpinType]] = None):
+    def to_rhf(self, project_onto: List[Tuple[Union[SpinType, AIndex]]] = None):
         """Convert an expression over spatial orbitals with a spin
         tag into a restricted expression.
 
         project_onto:
             A list of tuples of spins indicating configurations to
             project onto for the LHS. If None, project onto all
-            valid spin configurations.
+            valid spin configurations. Elements can also be indices
+            tie specific indices to the spins.
         """
 
-        if project_onto is not None:
+        if project_onto:
             if isinstance(project_onto, dict):
                 project_onto = project_onto[self.lhs.base.name]
             assert all(isinstance(x, tuple) for x in project_onto)
-            spins = tuple(index.spin for index in self.lhs.indices)
-            if spins not in project_onto:
+            if isinstance(project_onto[0][0], SpinType):
+                # project_onto is tuples of SpinType
+                assert all(all(isinstance(x, SpinType) for x in y) for y in project_onto)
+                projection = tuple(index.spin for index in self.lhs.indices)
+            else:
+                # project_onto also specifics the indices
+                assert all(all(isinstance(x, AIndex) for x in y) for y in project_onto)
+                projection = tuple(self.lhs.indices)
+            if projection not in project_onto:
                 return Term(self.lhs, (0,))
 
         new_rhs = []
@@ -966,6 +987,7 @@ class Term:
 
         new_term = Term(new_lhs, new_rhs)
         new_term.parent = self
+        new_term.original = self.original
 
         return new_term
 
@@ -1000,6 +1022,7 @@ class Term:
 
         new_term = Term(new_lhs, new_rhs)
         new_term.parent = self
+        new_term.original = self.original
 
         return new_term
 
@@ -1130,8 +1153,12 @@ def _flatten(terms):
     return out
 
 def _canonicalize(terms, indices):
-    terms = [term.canonicalize(indices=indices) for term in terms]
-    return terms
+    new_terms = []
+    for term in terms:
+        new_term = term.canonicalize(indices=indices)
+        new_term.original = term.original
+        new_terms.append(new_term)
+    return new_terms
 
 def _process_rhf(terms, indices, project_onto: List[Tuple[SpinType]] = None):
     terms = _flatten(terms)

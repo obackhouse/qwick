@@ -4,8 +4,8 @@ SRC=$(shell pwd)/src
 BUILD=$(shell pwd)/build
 API=$(shell pwd)/api
 INCLUDE=-I $(SRC)
-PBFLAGS:=$(shell /home/olli/psi4conda/envs/py37/bin/python3.7 -m pybind11 --includes)
-PBSUFFIX:=$(shell /home/olli/psi4conda/envs/py37/bin/python3.7-config --extension-suffix)
+PBFLAGS:=$(shell python -m pybind11 --includes)
+PBSUFFIX:=$(shell python-config --extension-suffix)
 
 all: log index.so operator.so expression.so wick.so
 
